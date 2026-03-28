@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CONTRA RL — Live Training</title>
+    <link rel="stylesheet" href="/static/style.css?v=2">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+    <header>
+        <div class="header-left">
+            <i data-lucide="gamepad-2" class="header-icon"></i>
+            <h1>CONTRA RL</h1>
+        </div>
+        <div class="header-right">
+            <div class="header-stat">
+                <i data-lucide="monitor" class="icon-sm"></i>
+                <span id="stream-fps">0</span> fps
+            </div>
+            <span class="badge" id="status-badge">
+                <i data-lucide="wifi-off" class="icon-xs"></i>
+                CONNECTING
+            </span>
+        </div>
+    </header>
+
+    <main>
+        <section class="game-panel">
+            <div class="game-frame">
+                <canvas id="game-canvas" width="256" height="240"></canvas>
+                <div class="no-frame" id="no-frame">
+                    <i data-lucide="loader" class="spin"></i>
+                    Waiting for frames...
+                </div>
+            </div>
+            <div class="controls admin-only" style="display:none">
+                <button id="btn-pause" onclick="togglePause()">
+                    <i data-lucide="pause" class="icon-btn"></i> Pause
+                </button>
+                <button id="btn-restart" onclick="restartGame()">
+                    <i data-lucide="rotate-ccw" class="icon-btn"></i> Restart
+                </button>
+                <button id="btn-save" onclick="saveCheckpoint()">
+                    <i data-lucide="save" class="icon-btn"></i> Save
+                </button>
+                <button id="btn-replay" onclick="playBestRun()">
+                    <i data-lucide="play" class="icon-btn"></i> Play Best
+                </button>
+            </div>
+            <div class="settings-panel admin-only" style="display:none">
+                <div class="setting-row">
+                    <i data-lucide="timer" class="icon-sm"></i>
+                    <label for="episode-length">Episode length</label>
+                    <input type="range" id="episode-length" min="5" max="300" step="5" value="40">
+                    <span id="episode-length-val">40s</span>
+                </div>
+            </div>
+        </section>
+
+        <section class="stats-panel">
+            <div class="stat-group">
+                <h2><i data-lucide="cpu" class="icon-heading"></i> Training</h2>
+                <div class="stat-row">
+                    <span class="stat-label"><i data-lucide="hash" class="icon-xs"></i> Total episodes</span>
+                    <span class="stat-value" id="episode">0</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label"><i data-lucide="clock" class="icon-xs"></i> Time</span>
+                    <span class="stat-value" id="training-time">0m</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label"><i data-lucide="footprints" class="icon-xs"></i> Timesteps</span>
+                    <span class="stat-value" id="timesteps">0 / 100M</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label"><i data-lucide="zap" class="icon-xs"></i> Train FPS</span>
+                    <span class="stat-value" id="fps">0</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label"><i data-lucide="timer-off" class="icon-xs"></i> Hit time limit</span>
+                    <span class="stat-value" id="timeout-pct">0%</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label"><i data-lucide="shield" class="icon-xs"></i> Auto-rollbacks</span>
+                    <span class="stat-value" id="rollback-count">0</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label"><i data-lucide="bookmark" class="icon-xs"></i> Last auto-save</span>
+                    <span class="stat-value" id="autosave-ago">-</span>
+                </div>
+                <div class="stat-row" id="rollback-ago-row" style="display:none">
+                    <span class="stat-label"><i data-lucide="undo-2" class="icon-xs"></i> Last rollback</span>
+                    <span class="stat-value" id="rollback-ago"></span>
+                </div>
+            </div>
+
+            <div class="stat-group top-runs-container">
+                <h2><i data-lucide="trophy" class="icon-heading"></i> Top Runs</h2>
+                <table id="top-runs">
+                    <thead>
+                        <tr><th>#</th><th>Episode</th><th>Reward</th><th>Level</th><th>Time</th></tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+
+    <section class="level-progress">
+        <div class="progress-header">
+            <h2><i data-lucide="map" class="icon-heading"></i> Level Progress</h2>
+            <span class="pb-timer" id="pb-timer"></span>
+        </div>
+        <div class="progress-bar-container">
+            <canvas id="progress-bar" height="32"></canvas>
+        </div>
+    </section>
+
+    <section class="chart-full">
+        <div class="chart-container">
+            <div class="chart-header">
+                <h2><i data-lucide="trending-up" class="icon-heading"></i> Reward History</h2>
+                <div class="setting-row" style="margin:0;">
+                    <i data-lucide="sliders-horizontal" class="icon-sm"></i>
+                    <label for="avg-window">Avg window</label>
+                    <input type="range" id="avg-window" min="5" max="200" step="5" value="50">
+                    <span id="avg-window-val">50</span>
+                </div>
+            </div>
+            <canvas id="reward-chart"></canvas>
+            <div class="chart-legend">
+                <span class="legend-item"><span class="dot" style="background:rgba(255,68,68,0.3)"></span> Raw reward per episode</span>
+                <span class="legend-item"><span class="dot" style="background:#ffcc00"></span> Avg reward (left axis) — is AI getting further?</span>
+                <span class="legend-item"><span class="dot" style="background:#4CAF50"></span> Avg survival (right axis) — is AI living longer?</span>
+            </div>
+        </div>
+    </section>
+
+    <script src="/static/app.js?v=2"></script>
+    <script>lucide.createIcons();</script>
+</body>
+</html>

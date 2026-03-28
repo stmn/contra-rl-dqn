@@ -1,0 +1,35 @@
+[project]
+name = "contra-rl-dqn"
+version = "1.0.0"
+description = "RL agent learning to play Contra NES using DQN with experience replay"
+requires-python = ">=3.10,<3.13"
+dependencies = [
+    "cynes>=0.1.2",
+    "gymnasium>=0.29.0",
+    "torch>=2.1.0",
+    "numpy>=1.24.0",
+    "opencv-python-headless>=4.8.0",
+    "pydantic-settings>=2.0.0",
+    "python-dotenv>=1.0.0",
+    "tensorboard>=2.14.0",
+    "fastapi>=0.110.0",
+    "uvicorn[standard]>=0.27.0",
+    "websockets>=12.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "ruff>=0.4.0",
+]
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["contra*", "config*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"

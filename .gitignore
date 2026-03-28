@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+
+# Virtual env
+.venv/
+venv/
+
+# Environment
+.env
+
+# ROMs (user must provide legally)
+roms/*.nes
+roms/*.bin
+roms/*.zip
+
+# Training artifacts
+checkpoints/
+logs/
+*.zip
+
+# stable-retro integration (ROM + state files)
+integrations/Contra-Nes/rom.nes
+integrations/Contra-Nes/rom.sha
+integrations/Contra-Nes/*.state
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+*.mp4
+.claude/
