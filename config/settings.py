@@ -17,11 +17,16 @@ class Settings(BaseSettings):
     total_timesteps: int = 100_000_000
 
     # Web
-    web_port: int = 41918  # different from PPO (41917)
+    web_port: int = 41918
 
     # Rewards
     death_penalty: float = -100.0
     progress_scale: float = 1.0
+
+    # Feature flags
+    hybrid_observation: bool = False   # RAM features alongside pixels
+    prioritised_replay: bool = False   # PER: surprise-weighted sampling
+    overlay_sprites: bool = True       # Draw enemy/bullet markers on frames
 
 
 settings = Settings()

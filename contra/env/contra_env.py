@@ -77,12 +77,19 @@ class ContraEnv(gym.Env):
         self._max_steps = max_episode_steps
         self._overlay_sprites = overlay_sprites
         self._render_mode = render_mode
+        self._hybrid_obs = settings.hybrid_observation
 
         # Gymnasium spaces
         self.action_space = spaces.Discrete(len(ACTIONS))
-        self.observation_space = spaces.Box(
-            low=0, high=255, shape=(240, 256, 3), dtype=np.uint8,
-        )
+        if self._hybrid_obs:
+            self.observation_space = spaces.Dict({
+                "image": spaces.Box(low=0, high=255, shape=(240, 256, 3), dtype=np.uint8),
+                "features": spaces.Box(low=0.0, high=1.0, shape=(22,), dtype=np.float32),
+            })
+        else:
+            self.observation_space = spaces.Box(
+                low=0, high=255, shape=(240, 256, 3), dtype=np.uint8,
+            )
 
         # State tracking
         self._step_count = 0
@@ -189,7 +196,13 @@ class ContraEnv(gym.Env):
         frame = self._nes.step(1)
         self._last_frame = frame.copy()
         info = self._get_info()
-        return frame, info
+        obs = self._make_obs(frame)
+        return obs, info
+
+    def _make_obs(self, frame):
+        if self._hybrid_obs:
+            return {"image": frame, "features": self._build_features()}
+        return frame
 
     def step(self, action: int):
         # Handle forced restart from web UI — just signal termination,
@@ -197,7 +210,8 @@ class ContraEnv(gym.Env):
         if self._force_restart:
             self._force_restart = False
             info = self._get_info()
-            return self._last_frame, 0.0, True, False, info
+            obs = self._make_obs(self._last_frame)
+            return obs, 0.0, True, False, info
 
         controller_input = ACTIONS[action]
         total_reward = 0.0
@@ -290,7 +304,8 @@ class ContraEnv(gym.Env):
         truncated = self._step_count >= self._max_steps
 
         info = self._get_info()
-        return frame, total_reward, terminated, truncated, info
+        obs = self._make_obs(frame)
+        return obs, total_reward, terminated, truncated, info
 
     def _get_info(self) -> dict:
         return {
@@ -304,6 +319,56 @@ class ContraEnv(gym.Env):
             "reward_death": round(self._reward_death, 1),
             "death_count": self._death_count,
         }
+
+    def _build_features(self) -> np.ndarray:
+        """Build 22-dim feature vector from RAM for hybrid observation."""
+        nes = self._nes
+        f = np.zeros(22, dtype=np.float32)
+
+        # Player (4 features)
+        px = nes[0x334]
+        py = nes[0x31A]
+        f[0] = px / 256.0
+        f[1] = py / 240.0
+        f[2] = 1.0 if nes[RAM_PLAYER_STATE] == 1 else 0.0
+        f[3] = 1.0 if (nes[0xA0] & 0x0F) > 0 else 0.0  # in air
+
+        # Find nearest 3 enemies by distance to player
+        enemies = []
+        for slot in range(16):
+            etype = nes[0x528 + slot]
+            ehp = nes[0x578 + slot]
+            if etype == 0 and ehp == 0:
+                continue
+            ex = nes[0x33E + slot]
+            ey = nes[0x324 + slot]
+            if ey > 230 or ey < 8 or ex < 8 or ex > 248:
+                continue
+            dist = abs(ex - px) + abs(ey - py)
+            enemies.append((dist, ex, ey, slot))
+
+        enemies.sort(key=lambda e: e[0])
+
+        # Nearest 3 enemies (4 features each: dx, dy, velocity, attack delay)
+        for i, (dist, ex, ey, slot) in enumerate(enemies[:3]):
+            base = 4 + i * 4
+            f[base] = (ex - px + 128) / 256.0      # relative X, centered
+            f[base + 1] = (ey - py + 120) / 240.0   # relative Y, centered
+            f[base + 2] = nes[0x508 + slot] / 256.0  # X velocity
+            f[base + 3] = nes[0x558 + slot] / 256.0  # attack delay timer
+
+        # Aggregate (3 features)
+        f[16] = min(len(enemies), 16) / 16.0  # num enemies on screen
+        f[17] = enemies[0][0] / 256.0 if enemies else 1.0  # nearest distance
+        f[18] = 1.0 if nes[0x8E] > 0 else 0.0  # enemy attack flag
+
+        # Player movement (3 features)
+        f[19] = (nes[0xA4] & 0x60) / 96.0  # edge fall code (bits 5-6)
+        f[20] = 1.0 if (nes[0xA0] & 0x0F) > 0 else 0.0  # jump status
+        y_vel = nes[0xC6]
+        f[21] = (y_vel if y_vel < 128 else y_vel - 256) / 128.0 + 0.5  # Y velocity normalized
+
+        return f
 
     def _apply_overlay(self, frame: np.ndarray) -> np.ndarray:
         """Draw sprite overlays: enemies, bullets, player."""
