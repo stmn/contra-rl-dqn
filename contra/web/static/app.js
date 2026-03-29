@@ -361,7 +361,7 @@ async function playBestRun() {
     } else {
         alert(data.message || "No replay available");
     }
-    $("#btn-replay").textContent = "Play Best";
+    $("#btn-replay").textContent = "Top Replay";
 }
 
 // === Level Progress Bar ===
@@ -478,11 +478,12 @@ async function loadSettings() {
     } catch (e) { /* ignore */ }
 }
 
-// === Admin mode (add ?admin=1 to URL) ===
-const isAdmin = new URLSearchParams(location.search).has("admin");
-if (isAdmin) {
-    document.querySelectorAll(".admin-only").forEach(el => el.style.removeProperty("display"));
-}
+// === Admin mode (auto-detect local network) ===
+fetch("/api/is-admin").then(r => r.json()).then(d => {
+    if (d.admin) {
+        document.querySelectorAll(".admin-only").forEach(el => el.style.removeProperty("display"));
+    }
+}).catch(() => {});
 
 // === Init ===
 initChart();
