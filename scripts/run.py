@@ -49,6 +49,7 @@ def main() -> None:
     )
     frame_buffer = SharedFrameBuffer(num_envs=1)
     frame_buffer.tracker = tracker
+    frame_buffer._best_reward = tracker._best_reward  # don't overwrite existing best video
 
     # Web dashboard
     web_init(tracker, frame_buffer)
