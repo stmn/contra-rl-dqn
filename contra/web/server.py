@@ -87,6 +87,21 @@ def get_controls() -> TrainingControls | None:
     return _controls
 
 
+_LOCAL_PREFIXES = ("127.", "192.168.", "10.", "172.16.", "::1", "localhost")
+
+def _is_local(request) -> bool:
+    client = request.client.host if request.client else ""
+    forwarded = request.headers.get("cf-connecting-ip", request.headers.get("x-forwarded-for", ""))
+    # If behind Cloudflare, cf-connecting-ip is the real IP
+    ip = forwarded.split(",")[0].strip() if forwarded else client
+    return any(ip.startswith(p) for p in _LOCAL_PREFIXES) or not forwarded
+
+
+@app.get("/api/is-admin")
+async def is_admin(request: Request):
+    return {"admin": _is_local(request)}
+
+
 @app.get("/")
 async def index():
     return FileResponse(STATIC_DIR / "index.html")
@@ -127,7 +142,9 @@ async def get_history():
 
 
 @app.post("/api/restart")
-async def restart_episode():
+async def restart_episode(request: Request):
+    if not _is_local(request):
+        return JSONResponse({"ok": False}, status_code=403)
     if _controls:
         _controls.request_restart()
         return {"ok": True, "message": "Restart requested"}
@@ -135,7 +152,9 @@ async def restart_episode():
 
 
 @app.post("/api/pause")
-async def toggle_pause():
+async def toggle_pause(request: Request):
+    if not _is_local(request):
+        return JSONResponse({"ok": False}, status_code=403)
     if _controls:
         paused = _controls.toggle_pause()
         return {"ok": True, "paused": paused}
@@ -143,7 +162,9 @@ async def toggle_pause():
 
 
 @app.post("/api/save")
-async def save_checkpoint():
+async def save_checkpoint(request: Request):
+    if not _is_local(request):
+        return JSONResponse({"ok": False}, status_code=403)
     if _controls:
         _controls.request_save()
         return {"ok": True, "message": "Save requested"}
@@ -172,7 +193,9 @@ async def play_best_run():
 
 
 @app.post("/api/settings")
-async def update_settings(data: dict):
+async def update_settings(request: Request, data: dict):
+    if not _is_local(request):
+        return JSONResponse({"ok": False}, status_code=403)
     if not _controls:
         return JSONResponse({"ok": False}, status_code=503)
     if "episode_length" in data:
