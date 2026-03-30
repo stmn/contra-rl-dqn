@@ -104,6 +104,8 @@ class ContraEnv(gym.Env):
         self._idle_counter = 0
         self._death_this_frame = False
         self._prev_score = 0
+        self._saved_game_state: np.ndarray | None = None
+        self._practice = False
 
         # Reward breakdown counters
         self._reward_scroll = 0.0
@@ -156,6 +158,16 @@ class ContraEnv(gym.Env):
         """Called from web UI — forces episode to end on next step."""
         self._force_restart = True
 
+    def save_game_state(self) -> None:
+        """Save current NES state. Future resets will load from here (practice mode)."""
+        self._saved_game_state = self._nes.save()
+        self._practice = True
+
+    def clear_game_state(self) -> None:
+        """Remove saved NES state. Resets go back to level start."""
+        self._saved_game_state = None
+        self._practice = False
+
     def _read_raw_scroll(self) -> int:
         return self._nes[RAM_SCROLL_HI] * 256 + self._nes[RAM_SCROLL_LO]
 
@@ -175,7 +187,9 @@ class ContraEnv(gym.Env):
 
     def reset(self, *, seed=None, options=None):
         super().reset(seed=seed)
-        if self._initial_state is not None:
+        if self._saved_game_state is not None:
+            self._nes.load(self._saved_game_state)
+        elif self._initial_state is not None:
             self._nes.load(self._initial_state)
         else:
             self._boot()
@@ -318,6 +332,7 @@ class ContraEnv(gym.Env):
             "reward_scroll": round(self._reward_scroll, 1),
             "reward_death": round(self._reward_death, 1),
             "death_count": self._death_count,
+            "practice": self._practice,
         }
 
     def _build_features(self) -> np.ndarray:

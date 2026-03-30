@@ -402,6 +402,15 @@ class DQNTrainer:
                     time.sleep(0.1)
                 if self.controls.consume_save() and self.on_save:
                     self.on_save()
+                if self.controls.consume_save_state():
+                    # Auto-save model before practice as safety net
+                    self.save(str(self._checkpoint_dir / "pre_practice.pt"))
+                    self.env.unwrapped.save_game_state()
+                    self.controls.practice_mode = True
+                    print("Model saved to pre_practice.pt — practice mode ON")
+                if self.controls.consume_clear_state():
+                    self.env.unwrapped.clear_game_state()
+                    print("Practice mode OFF (pre_practice.pt available for rollback)")
                 if self.controls.consume_restart():
                     obs, info = self.env.reset()
                     ep_reward = 0.0
@@ -445,49 +454,54 @@ class DQNTrainer:
 
             # Episode ended
             if done:
-                if self.on_episode:
-                    ep_info = {
-                        "step": ep_steps,
-                        "deaths": 1 if terminated else 0,
-                        "scroll": self.frame_buffer.env0_scroll if self.frame_buffer else 0,
-                    }
-                    self.on_episode(ep_reward, ep_info)
+                is_practice = self.env.unwrapped._practice
 
-                # Auto-save stats
-                if self.frame_buffer and self.frame_buffer.tracker:
-                    if self.frame_buffer.env0_episode % 50 == 0:
-                        self.frame_buffer.tracker.save()
+                # Only record stats for non-practice episodes
+                if not is_practice:
+                    if self.on_episode:
+                        ep_info = {
+                            "step": ep_steps,
+                            "deaths": 1 if terminated else 0,
+                            "scroll": self.frame_buffer.env0_scroll if self.frame_buffer else 0,
+                        }
+                        self.on_episode(ep_reward, ep_info)
 
-                # Auto-rollback
-                self._avg_window.append(ep_reward)
-                if len(self._avg_window) > 200:
-                    self._avg_window.pop(0)
+                    # Auto-save stats
+                    if self.frame_buffer and self.frame_buffer.tracker:
+                        if self.frame_buffer.env0_episode % 50 == 0:
+                            self.frame_buffer.tracker.save()
 
-                if len(self._avg_window) >= 30:
-                    current_avg = np.mean(self._avg_window[-30:])
-                    if current_avg > self._peak_avg:
-                        self._peak_avg = current_avg
-                        self.save(str(self._checkpoint_dir / "auto_best.pt"))
-                        if self.frame_buffer and self.frame_buffer.tracker:
-                            self.frame_buffer.tracker.on_autosave()
+                    # Auto-rollback
+                    self._avg_window.append(ep_reward)
+                    if len(self._avg_window) > 200:
+                        self._avg_window.pop(0)
 
-                    drop = (self._peak_avg - current_avg) / max(self._peak_avg, 1)
-                    if drop > 0.5 and global_step - self._last_rollback_step > 10_000:
-                        print(f"\n!!! COLLAPSE DETECTED: avg {current_avg:.0f} vs peak {self._peak_avg:.0f}")
-                        print(f"!!! AUTO-ROLLBACK\n")
-                        best = self._checkpoint_dir / "auto_best.pt"
-                        if best.exists():
-                            self.load(str(best))
-                            self._rollback_count += 1
-                            self._last_rollback_step = global_step
-                            self._avg_window.clear()
+                    if len(self._avg_window) >= 30:
+                        current_avg = np.mean(self._avg_window[-30:])
+                        if current_avg > self._peak_avg:
+                            self._peak_avg = current_avg
+                            self.save(str(self._checkpoint_dir / "auto_best.pt"))
                             if self.frame_buffer and self.frame_buffer.tracker:
-                                self.frame_buffer.tracker.on_rollback(self._rollback_count)
+                                self.frame_buffer.tracker.on_autosave()
 
-                # Frame buffer tracking
+                        drop = (self._peak_avg - current_avg) / max(self._peak_avg, 1)
+                        if drop > 0.5 and global_step - self._last_rollback_step > 10_000:
+                            print(f"\n!!! COLLAPSE DETECTED: avg {current_avg:.0f} vs peak {self._peak_avg:.0f}")
+                            print(f"!!! AUTO-ROLLBACK\n")
+                            best = self._checkpoint_dir / "auto_best.pt"
+                            if best.exists():
+                                self.load(str(best))
+                                self._rollback_count += 1
+                                self._last_rollback_step = global_step
+                                self._avg_window.clear()
+                                if self.frame_buffer and self.frame_buffer.tracker:
+                                    self.frame_buffer.tracker.on_rollback(self._rollback_count)
+
+                # Frame buffer tracking (always increment for dashboard)
                 if self.frame_buffer:
                     self.frame_buffer.env0_episode += 1
-                    self.frame_buffer.on_episode_done(0, ep_reward)
+                    if not is_practice:
+                        self.frame_buffer.on_episode_done(0, ep_reward)
 
                 obs, info = self.env.reset()
                 ep_reward = 0.0
