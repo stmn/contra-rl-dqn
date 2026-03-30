@@ -157,7 +157,7 @@ function updateStats(s) {
 
 // === Chart ===
 let rewardChart;
-const maxChartPoints = 500;
+const maxChartPoints = 5000;
 
 function initChart() {
     const chartCtx = $("#reward-chart").getContext("2d");

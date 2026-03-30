@@ -135,8 +135,8 @@ async def get_history():
     if _tracker is None:
         return {"reward_history": [], "top_runs": []}
     return {
-        "reward_history": _tracker.reward_history(1000),
-        "survival_history": _tracker.survival_history(1000),
+        "reward_history": _tracker.reward_history(5000),
+        "survival_history": _tracker.survival_history(5000),
         "top_runs": _tracker.top_runs(10),
     }
 

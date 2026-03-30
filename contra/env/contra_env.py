@@ -370,38 +370,57 @@ class ContraEnv(gym.Env):
 
         return f
 
+    # Overlay config: type → (shade, shape)
+    # Shapes: 'circle', 'vrect' (vertical rect), 'triangle', 'diamond'
+    _OVERLAY_CONFIG = {
+        0x01: (255, 'circle'),     # enemy bullet — small bright circle
+        0x02: (180, 'diamond'),    # destructible box (bonus) — diamond
+        0x03: (180, 'diamond'),    # flying bonus — diamond
+        0x04: (255, 'triangle'),   # static turret — triangle
+        0x05: (255, 'vrect'),      # running soldier — vertical rect
+        0x06: (255, 'vrect'),      # static enemy/sniper — vertical rect
+    }
+
     def _apply_overlay(self, frame: np.ndarray) -> np.ndarray:
-        """Draw sprite overlays: enemies, bullets, player."""
+        """Draw sprite overlays: enemies, bullets, player with type labels."""
         if not self._overlay_sprites or frame is None:
             return frame
         import cv2
         f = frame.copy()
 
-        # Enemies / destructible objects
         for slot in range(16):
             etype = self._nes[0x528 + slot]
             ehp = self._nes[0x578 + slot]
+            routine = self._nes[0x4B8 + slot]
             if etype == 0 and ehp == 0:
                 continue
+            if routine == 0 or ehp == 0:
+                continue  # dead/dying — skip explosion animation
             ex = self._nes[0x33E + slot]
             ey = self._nes[0x324 + slot]
-            if ey > 230 or ey < 8 or ex < 8 or ex > 248:
+            if ey > 230 or ey < 8 or ex < 24 or ex > 240:
                 continue
-            score_code = self._nes[0x588 + slot] >> 4
-            enemy_x_vel = self._nes[0x508 + slot]
-            enemy_y_vel = self._nes[0x4E8 + slot]
-            is_moving = enemy_x_vel != 0 or enemy_y_vel != 0
 
-            if score_code == 0:
-                # Projectile — small white dot
-                cv2.circle(f, (ex, ey), 2, (255, 255, 255), -1)
-            elif is_moving:
-                # Moving enemy — filled white box
-                x1, y1 = max(0, ex - 8), max(0, ey - 8)
-                x2, y2 = min(255, ex + 8), min(239, ey + 8)
-                cv2.rectangle(f, (x1, y1), (x2, y2), (255, 255, 255), -1)
+            config = self._OVERLAY_CONFIG.get(etype)
+            if config is None:
+                continue
 
-        # Player
+            shade, shape = config
+            color = (shade, shade, shade)
+
+            if shape == 'circle':
+                cv2.circle(f, (ex, ey), 3, color, -1)
+            elif shape == 'vrect':
+                cv2.rectangle(f, (max(0, ex - 5), max(0, ey - 10)),
+                              (min(255, ex + 5), min(239, ey + 10)), color, -1)
+            elif shape == 'triangle':
+                pts = np.array([[ex, ey - 10], [ex - 8, ey + 6], [ex + 8, ey + 6]], dtype=np.int32)
+                cv2.fillPoly(f, [pts], color)
+            elif shape == 'diamond':
+                pts = np.array([[ex, ey - 8], [ex + 6, ey], [ex, ey + 8], [ex - 6, ey]], dtype=np.int32)
+                cv2.fillPoly(f, [pts], color)
+
+        # Player — medium gray box
         px, py = self._nes[0x334], self._nes[0x31A]
         if 0 < px < 255 and 0 < py < 230:
             cv2.rectangle(f, (px - 6, py - 12), (px + 6, py + 4), (180, 180, 180), -1)
