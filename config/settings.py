@@ -24,8 +24,8 @@ class Settings(BaseSettings):
     progress_scale: float = 1.0
 
     # Feature flags
-    hybrid_observation: bool = False   # RAM features alongside pixels
-    prioritised_replay: bool = False   # PER: surprise-weighted sampling
+    hybrid_observation: bool = True    # RAM features alongside pixels
+    prioritised_replay: bool = True    # PER: surprise-weighted sampling
     overlay_sprites: bool = True       # Draw enemy/bullet markers on frames
 
 
