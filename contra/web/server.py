@@ -13,6 +13,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from config.settings import settings
 from contra.stats.tracker import StatsTracker
 from contra.training.callbacks import SharedFrameBuffer
 
@@ -45,6 +46,9 @@ class TrainingControls:
         self.paused = False
         self.restart_requested = False
         self.save_requested = False
+        self.save_state_requested = False
+        self.clear_state_requested = False
+        self.practice_mode = False
         self.episode_length = 18_000  # 10 min safety net
         self.num_envs = 8
 
@@ -72,6 +76,29 @@ class TrainingControls:
         with self._lock:
             if self.save_requested:
                 self.save_requested = False
+                return True
+            return False
+
+    def request_save_state(self) -> None:
+        with self._lock:
+            self.save_state_requested = True
+
+    def consume_save_state(self) -> bool:
+        with self._lock:
+            if self.save_state_requested:
+                self.save_state_requested = False
+                return True
+            return False
+
+    def request_clear_state(self) -> None:
+        with self._lock:
+            self.clear_state_requested = True
+            self.practice_mode = False
+
+    def consume_clear_state(self) -> bool:
+        with self._lock:
+            if self.clear_state_requested:
+                self.clear_state_requested = False
                 return True
             return False
 
@@ -171,6 +198,48 @@ async def save_checkpoint(request: Request):
     return JSONResponse({"ok": False}, status_code=503)
 
 
+@app.post("/api/save-state")
+async def save_game_state(request: Request):
+    if not _is_local(request):
+        return JSONResponse({"ok": False}, status_code=403)
+    if _controls:
+        _controls.request_save_state()
+        return {"ok": True, "message": "Game state saved — practice mode ON"}
+    return JSONResponse({"ok": False}, status_code=503)
+
+
+@app.post("/api/clear-state")
+async def clear_game_state(request: Request):
+    if not _is_local(request):
+        return JSONResponse({"ok": False}, status_code=403)
+    if _controls:
+        _controls.request_clear_state()
+        return {"ok": True, "message": "Game state cleared — practice mode OFF"}
+    return JSONResponse({"ok": False}, status_code=503)
+
+
+@app.get("/api/config")
+async def get_config():
+    conf = {
+        "features": {
+            "hybrid_observation": settings.hybrid_observation,
+            "prioritised_replay": settings.prioritised_replay,
+            "overlay_sprites": settings.overlay_sprites,
+        },
+        "rewards": {
+            "death_penalty": settings.death_penalty,
+            "progress_scale": settings.progress_scale,
+        },
+        "training": {
+            "device": settings.device,
+            "total_timesteps": settings.total_timesteps,
+        },
+    }
+    if _frame_buffer and hasattr(_frame_buffer, 'trainer_config'):
+        conf["dqn"] = _frame_buffer.trainer_config
+    return conf
+
+
 @app.get("/api/best-replay")
 async def get_best_replay():
     import json
@@ -265,6 +334,7 @@ async def ws_stats(ws: WebSocket):
                 d = _snap_to_dict(_tracker.snapshot())
                 if _controls:
                     d["paused"] = _controls.paused
+                    d["practice"] = _controls.practice_mode
                 if _frame_buffer:
                     d["env0_episode"] = _frame_buffer.env0_episode
                     d["features"] = _frame_buffer.env0_features

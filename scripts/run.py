@@ -90,6 +90,24 @@ def main() -> None:
         frame_buffer=frame_buffer,
     )
 
+    # Expose trainer config to web API (cast numpy types to native Python)
+    frame_buffer.trainer_config = {
+        "lr": float(trainer.lr),
+        "gamma": float(trainer.gamma),
+        "batch_size": int(trainer.batch_size),
+        "buffer_size": int(trainer.buffer_size),
+        "train_freq": int(trainer.train_freq),
+        "target_update_freq": int(trainer.target_update_freq),
+        "epsilon_start": float(trainer.epsilon_start),
+        "epsilon_end": float(trainer.epsilon_end),
+        "epsilon_decay": int(trainer.epsilon_decay),
+        "n_actions": int(trainer.n_actions),
+        "hybrid": bool(trainer._hybrid),
+        "per": bool(trainer._per),
+        "frame_skip": int(env.unwrapped._frame_skip),
+        "max_episode_steps": int(env.unwrapped._max_steps),
+    }
+
     checkpoint = find_latest_checkpoint()
     if checkpoint:
         log.info(f"Resuming from: {checkpoint}")
