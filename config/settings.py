@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     web_port: int = 41918
 
     # Rewards
-    death_penalty: float = -100.0
+    death_penalty: float = -500.0
     progress_scale: float = 1.0
 
     # Feature flags

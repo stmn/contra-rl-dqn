@@ -310,8 +310,6 @@ class ContraEnv(gym.Env):
 
         self._last_frame = frame.copy() if frame is not None else None
 
-        # Clamp reward
-        total_reward = float(np.clip(total_reward, -50.0, 50.0))
         self._total_reward += total_reward
 
         # Truncation: time limit (death ends episode via terminated)
