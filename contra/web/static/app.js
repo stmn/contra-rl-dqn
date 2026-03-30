@@ -11,19 +11,25 @@ let agentBitmap = null;
 let newFrameReady = false;
 let liveScroll = 0;
 let liveEpisode = 0;
+let swappedView = false;
+
+canvas.style.cursor = "pointer";
+canvas.addEventListener("click", () => { swappedView = !swappedView; });
 
 // Render loop — runs at monitor refresh rate (60fps), always smooth
 function renderLoop() {
     if (newFrameReady && latestBitmap) {
-        ctx.drawImage(latestBitmap, 0, 0);
+        const mainBmp = swappedView ? agentBitmap : latestBitmap;
+        const pipBmp = swappedView ? latestBitmap : agentBitmap;
 
-        // Agent view in bottom-right corner
-        if (agentBitmap) {
+        if (mainBmp) ctx.drawImage(mainBmp, 0, 0, canvas.width, canvas.height);
+
+        if (pipBmp) {
             const aw = 80, ah = 80;
             const ax = canvas.width - aw - 2, ay = canvas.height - ah - 2;
             ctx.fillStyle = "rgba(0,0,0,0.5)";
             ctx.fillRect(ax - 1, ay - 1, aw + 2, ah + 2);
-            ctx.drawImage(agentBitmap, ax, ay, aw, ah);
+            ctx.drawImage(pipBmp, ax, ay, aw, ah);
         }
 
         newFrameReady = false;
@@ -141,6 +147,17 @@ function updateStats(s) {
         $("#autosave-ago").textContent = min > 0 ? `${min}m ${sec}s ago` : `${sec}s ago`;
     }
 
+    // Practice mode indicator
+    const practiceBadge = $("#practice-badge");
+    if (practiceBadge) {
+        practiceBadge.style.display = s.practice ? "" : "none";
+    }
+    const btnClear = $("#btn-clear-state");
+    const btnSave = $("#btn-save-state");
+    if (btnClear) btnClear.style.display = s.practice ? "" : "none";
+    if (btnSave && s.practice) btnSave.classList.add("active");
+    if (btnSave && !s.practice) btnSave.classList.remove("active");
+
 
     lastSeenEpisode = s.episode;
 
@@ -243,14 +260,32 @@ function initChart() {
     });
 }
 
-let rollingWindow = 50;
+let rollingWindow = parseInt(localStorage.getItem("contra_avg") || "50");
+let dataRange = parseInt(localStorage.getItem("contra_range") || "5000");
+let chartViewMode = localStorage.getItem("contra_chartView") || "chart";
+
 const avgSlider = $("#avg-window");
 const avgVal = $("#avg-window-val");
+avgSlider.value = rollingWindow;
+avgVal.textContent = rollingWindow;
 avgSlider.addEventListener("input", () => {
     rollingWindow = parseInt(avgSlider.value);
     avgVal.textContent = rollingWindow;
+    localStorage.setItem("contra_avg", rollingWindow);
     updateChart();
 });
+
+const rangeSlider = $("#data-range");
+const rangeVal = $("#data-range-val");
+rangeSlider.value = dataRange;
+rangeVal.textContent = dataRange >= 5000 ? "All" : dataRange;
+rangeSlider.addEventListener("input", () => {
+    dataRange = parseInt(rangeSlider.value);
+    rangeVal.textContent = dataRange >= 5000 ? "All" : dataRange;
+    localStorage.setItem("contra_range", dataRange);
+    updateChart();
+});
+
 let allRewards = [];
 let allSurvival = [];
 
@@ -265,14 +300,64 @@ function computeRollingAvg(arr) {
 }
 
 function updateChart() {
-    const visible = allRewards.slice(-maxChartPoints);
-    const visibleSurv = allSurvival.slice(-maxChartPoints);
+    const ranged = allRewards.slice(-dataRange);
+    const rangedSurv = allSurvival.slice(-dataRange);
+    const startEp = Math.max(0, allRewards.length - dataRange);
+
+    const avgRewards = computeRollingAvg(ranged);
+    const avgSurv = computeRollingAvg(rangedSurv);
+
     const data = rewardChart.data;
-    data.labels = visible.map((_, i) => i);
-    data.datasets[0].data = visible;
-    data.datasets[1].data = computeRollingAvg(visible);
-    data.datasets[2].data = computeRollingAvg(visibleSurv);
+    data.labels = ranged.map((_, i) => startEp + i + 1);
+    data.datasets[0].data = ranged;
+    data.datasets[1].data = avgRewards;
+    data.datasets[2].data = avgSurv;
     rewardChart.update();
+
+    // Live avg values in legend
+    const elAvgR = $("#live-avg-reward");
+    const elAvgS = $("#live-avg-survival");
+    if (elAvgR && avgRewards.length > 0) elAvgR.textContent = avgRewards[avgRewards.length - 1].toFixed(0);
+    if (elAvgS && avgSurv.length > 0) elAvgS.textContent = avgSurv[avgSurv.length - 1].toFixed(0);
+
+    updateRewardTable(ranged, rangedSurv, startEp);
+}
+
+function setChartView(view) {
+    chartViewMode = view;
+    localStorage.setItem("contra_chartView", view);
+    $("#chart-view").style.display = view === "chart" ? "" : "none";
+    $("#table-view").style.display = view === "table" ? "" : "none";
+    $("#btn-chart-view").classList.toggle("active", view === "chart");
+    $("#btn-table-view").classList.toggle("active", view === "table");
+}
+
+function updateRewardTable(rewards, survival, startEp) {
+    const tbody = document.querySelector("#reward-table tbody");
+    if (!tbody || rewards.length === 0) return;
+
+    const bucketSize = rollingWindow;
+    tbody.innerHTML = "";
+
+    for (let i = 0; i < rewards.length; i += bucketSize) {
+        const chunk = rewards.slice(i, i + bucketSize);
+        const survChunk = survival.slice(i, i + bucketSize);
+        const avg = chunk.reduce((a, b) => a + b, 0) / chunk.length;
+        const avgSurv = survChunk.length > 0 ? survChunk.reduce((a, b) => a + b, 0) / survChunk.length : 0;
+        const best = Math.max(...chunk);
+        const epFrom = startEp + i + 1;
+        const epTo = startEp + Math.min(i + bucketSize, rewards.length);
+
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+            <td>${epFrom}–${epTo}</td>
+            <td>${avg.toFixed(1)}</td>
+            <td>${avgSurv.toFixed(0)}</td>
+            <td>${best.toFixed(1)}</td>
+            <td>${chunk.length}</td>
+        `;
+        tbody.appendChild(tr);
+    }
 }
 
 function addRewardPoint(episode, reward) {
@@ -350,11 +435,11 @@ async function restartGame() {
 async function saveCheckpoint() {
     await fetch("/api/save", { method: "POST" });
     $("#btn-save").textContent = "Saving...";
-    setTimeout(() => { $("#btn-save").textContent = "Save"; }, 2000);
+    setTimeout(() => { $("#btn-save").textContent = "Save Model"; }, 2000);
 }
 
 async function playBestRun() {
-    $("#btn-replay").textContent = "Rendering...";
+    $("#btn-replay").textContent = "Loading...";
     const res = await fetch("/api/play-best", { method: "POST" });
     const data = await res.json();
     if (data.ok) {
@@ -362,7 +447,19 @@ async function playBestRun() {
     } else {
         alert(data.message || "No replay available");
     }
-    $("#btn-replay").textContent = "Top Replay";
+    $("#btn-replay").textContent = "Best Replay";
+}
+
+async function saveGameState() {
+    await fetch("/api/save-state", { method: "POST" });
+    $("#btn-save-state").classList.add("active");
+    $("#btn-clear-state").style.display = "";
+}
+
+async function clearGameState() {
+    await fetch("/api/clear-state", { method: "POST" });
+    $("#btn-save-state").classList.remove("active");
+    $("#btn-clear-state").style.display = "none";
 }
 
 // === Level Progress Bar ===
@@ -481,14 +578,22 @@ function updateActionBars() {
 setInterval(updateActionBars, 3000);
 
 // === Tabs ===
+function switchTab(tabName) {
+    document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+    document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
+    const btn = document.querySelector(`.tab[data-tab="${tabName}"]`);
+    if (btn) btn.classList.add("active");
+    const content = document.getElementById("tab-" + tabName);
+    if (content) content.classList.add("active");
+    localStorage.setItem("contra_tab", tabName);
+}
+
 document.querySelectorAll(".tab").forEach(tab => {
-    tab.addEventListener("click", () => {
-        document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
-        document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
-        tab.classList.add("active");
-        document.getElementById("tab-" + tab.dataset.tab).classList.add("active");
-    });
+    tab.addEventListener("click", () => switchTab(tab.dataset.tab));
 });
+
+const savedTab = localStorage.getItem("contra_tab");
+if (savedTab) switchTab(savedTab);
 
 // === Agent Input tab ===
 const ACTIONS = [
@@ -541,8 +646,76 @@ fetch("/api/is-admin").then(r => r.json()).then(d => {
     }
 }).catch(() => {});
 
+// === Config tab ===
+const CONFIG_TIPS = {
+    hybrid_observation: "Agent receives both pixel frames AND 28 numerical RAM features (enemy positions, distances). Helps react to things hard to see in pixels.",
+    prioritised_replay: "Experience replay samples surprising transitions more often (high TD-error). Learns faster from rare events like deaths and kills.",
+    overlay_sprites: "Draws shape markers on game frames showing enemy/bullet positions. Helps the CNN recognize threats.",
+    death_penalty: "Negative reward the agent gets each time it dies. Teaches it to avoid danger.",
+    progress_scale: "Multiplier for scroll-based reward. Higher = stronger incentive to move right.",
+    device: "Hardware used for neural network computation. MPS = Apple GPU, CPU = processor only.",
+    total_timesteps: "Total frames to process before training ends.",
+    lr: "Learning rate — how fast the neural network updates its weights. Too high = unstable, too low = slow learning.",
+    gamma: "Discount factor — how much the agent values future rewards vs immediate ones. 0.99 = very forward-looking.",
+    batch_size: "Number of experiences sampled from memory for each learning step.",
+    buffer_size: "How many past experiences the agent remembers. Larger = more diverse learning.",
+    train_freq: "Learn from replay buffer every N steps.",
+    target_update_freq: "Sync target network every N steps. Stabilizes learning.",
+    epsilon_start: "Initial exploration rate. 1.0 = fully random actions at the start.",
+    epsilon_end: "Final exploration rate. 0.05 = 5% random actions once fully trained.",
+    epsilon_decay: "Steps over which exploration decreases from start to end.",
+    n_actions: "Number of different button combinations the agent can choose from.",
+    hybrid: "Whether hybrid observation (pixels + RAM features) is active.",
+    per: "Whether Prioritised Experience Replay is active.",
+    frame_skip: "Agent makes a decision every N frames. Reduces computation and gives actions time to take effect.",
+    max_episode_steps: "Safety limit — episode ends after this many steps even if agent is still alive.",
+};
+
+async function loadConfig() {
+    const el = $("#config-content");
+    if (!el) return;
+    try {
+        const res = await fetch("/api/config");
+        if (!res.ok) throw new Error(res.status);
+        const cfg = await res.json();
+
+        const sections = [
+            { title: "Feature Flags", items: cfg.features, format: "bool" },
+            { title: "Rewards", items: cfg.rewards, format: "num" },
+            { title: "Training", items: cfg.training, format: "num" },
+            { title: "DQN Hyperparameters", items: cfg.dqn, format: "num" },
+        ];
+
+        el.innerHTML = sections.filter(s => s.items && Object.keys(s.items).length > 0).map(s => `
+            <h3 style="color:#666;font-size:11px;text-transform:uppercase;letter-spacing:1px;margin:12px 0 6px">${s.title}</h3>
+            ${Object.entries(s.items).map(([k, v]) => {
+                const tip = CONFIG_TIPS[k] ? ` data-tippy-content="${CONFIG_TIPS[k].replace(/"/g, '&quot;')}"` : '';
+                const info = CONFIG_TIPS[k] ? ' <span style="color:#555;font-size:10px">(?)</span>' : '';
+                return `
+                <div class="stat-row">
+                    <span class="stat-label"${tip}>${k.replace(/_/g, ' ')}${info}</span>
+                    <span class="stat-value">${s.format === "bool"
+                        ? `<span style="color:${v ? '#4CAF50' : '#ff4444'}">${v ? 'ON' : 'OFF'}</span>`
+                        : typeof v === 'number' ? v.toLocaleString() : v
+                    }</span>
+                </div>`;
+            }).join("")}
+        `).join("");
+        // Init tooltips for dynamically rendered config
+        if (typeof tippy !== 'undefined') {
+            tippy('#config-content [data-tippy-content]', {
+                theme: 'contra', placement: 'top', arrow: true, delay: [200, 0], maxWidth: 280,
+            });
+        }
+    } catch (e) {
+        el.innerHTML = '<div class="stat-row"><span class="stat-label">Config unavailable — deploy new code to server</span></div>';
+    }
+}
+
 // === Init ===
 initChart();
+setChartView(chartViewMode);
 connectFrameWS();
 connectStatsWS();
 loadHistory();
+loadConfig();
