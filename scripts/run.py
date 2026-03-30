@@ -94,6 +94,14 @@ def main() -> None:
     if checkpoint:
         log.info(f"Resuming from: {checkpoint}")
         trainer.load(str(checkpoint))
+        # Restore peak avg from saved history so auto-save doesn't spam
+        history = tracker.reward_history(200)
+        if len(history) >= 30:
+            import numpy as _np
+            trainer._peak_avg = max(
+                _np.mean(history[i:i+30]) for i in range(len(history) - 29)
+            )
+            log.info(f"Restored peak avg: {trainer._peak_avg:.0f}")
     else:
         log.info("Starting fresh training")
 

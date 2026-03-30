@@ -16,8 +16,12 @@
         </div>
         <div class="header-right">
             <div class="header-stat">
-                <i data-lucide="monitor" class="icon-sm"></i>
-                <span id="stream-fps">0</span> fps
+                <i data-lucide="hash" class="icon-sm"></i>
+                EP <span id="header-episode">0</span>
+            </div>
+            <div class="header-stat">
+                <i data-lucide="clock" class="icon-sm"></i>
+                <span id="header-time">0m</span>
             </div>
             <span class="badge" id="status-badge">
                 <i data-lucide="wifi-off" class="icon-xs"></i>
@@ -35,6 +39,9 @@
                     Waiting for frames...
                 </div>
             </div>
+        </section>
+
+        <section class="stats-panel">
             <div class="controls admin-only" style="display:none">
                 <button id="btn-pause" onclick="togglePause()">
                     <i data-lucide="pause" class="icon-btn"></i> Pause
@@ -49,9 +56,14 @@
                     <i data-lucide="play" class="icon-btn"></i> Top Replay
                 </button>
             </div>
-        </section>
+            <div class="tabs">
+                <button class="tab active" data-tab="training"><i data-lucide="cpu" class="icon-btn"></i> Training</button>
+                <button class="tab" data-tab="top-runs"><i data-lucide="trophy" class="icon-btn"></i> Top Runs</button>
+                <button class="tab" data-tab="agent-input"><i data-lucide="brain" class="icon-btn"></i> Agent Input</button>
+                <button class="tab" data-tab="agent-output"><i data-lucide="activity" class="icon-btn"></i> Agent Output</button>
+            </div>
 
-        <section class="stats-panel">
+            <div class="tab-content active" id="tab-training">
             <div class="stat-group">
                 <h2><i data-lucide="cpu" class="icon-heading"></i> Training</h2>
                 <div class="stat-row">
@@ -88,6 +100,9 @@
                 </div>
             </div>
 
+            </div>
+
+            <div class="tab-content" id="tab-top-runs">
             <div class="stat-group top-runs-container">
                 <h2><i data-lucide="trophy" class="icon-heading"></i> Top Runs</h2>
                 <table id="top-runs">
@@ -96,6 +111,24 @@
                     </thead>
                     <tbody></tbody>
                 </table>
+            </div>
+            </div>
+
+            <div class="tab-content" id="tab-agent-output">
+            <div class="stat-group">
+                <h2><i data-lucide="activity" class="icon-heading"></i> Action Usage</h2>
+                <div id="action-bars"></div>
+            </div>
+            </div>
+
+            <div class="tab-content" id="tab-agent-input">
+            <div class="stat-group">
+                <h2><i data-lucide="brain" class="icon-heading"></i> Agent Input</h2>
+                <div class="agent-input-section" id="features-section" style="display:none">
+                    <h3>RAM Features (22 values)</h3>
+                    <div class="features-grid" id="features-grid"></div>
+                </div>
+            </div>
             </div>
         </section>
     </main>
@@ -121,7 +154,7 @@
                     <span id="avg-window-val">50</span>
                 </div>
             </div>
-            <canvas id="reward-chart"></canvas>
+            <canvas id="reward-chart" style="max-height:400px"></canvas>
             <div class="chart-legend">
                 <span class="legend-item"><span class="dot" style="background:rgba(255,68,68,0.3)"></span> Raw reward per episode</span>
                 <span class="legend-item"><span class="dot" style="background:#ffcc00"></span> Avg reward (left axis) — is AI getting further?</span>

@@ -45,7 +45,7 @@ class TrainingControls:
         self.paused = False
         self.restart_requested = False
         self.save_requested = False
-        self.episode_length = 600  # max steps per episode
+        self.episode_length = 18_000  # 10 min safety net
         self.num_envs = 8
 
     def request_restart(self) -> None:
@@ -267,6 +267,8 @@ async def ws_stats(ws: WebSocket):
                     d["paused"] = _controls.paused
                 if _frame_buffer:
                     d["env0_episode"] = _frame_buffer.env0_episode
+                    d["features"] = _frame_buffer.env0_features
+                    d["action_counts"] = _frame_buffer.action_counts
                 msg["stats"] = d
             await ws.send_json(msg)
             await asyncio.sleep(0.5)

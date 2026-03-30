@@ -65,7 +65,7 @@ class ContraEnv(gym.Env):
         rom_path: str | Path | None = None,
         render_mode: str | None = "rgb_array",
         frame_skip: int = 2,
-        max_episode_steps: int = 600,
+        max_episode_steps: int = 18_000,  # 10 min safety net, game over ends sooner
         overlay_sprites: bool = False,
     ) -> None:
         super().__init__()
@@ -84,7 +84,7 @@ class ContraEnv(gym.Env):
         if self._hybrid_obs:
             self.observation_space = spaces.Dict({
                 "image": spaces.Box(low=0, high=255, shape=(240, 256, 3), dtype=np.uint8),
-                "features": spaces.Box(low=0.0, high=1.0, shape=(22,), dtype=np.float32),
+                "features": spaces.Box(low=0.0, high=1.0, shape=(28,), dtype=np.float32),
             })
         else:
             self.observation_space = spaces.Box(
@@ -287,7 +287,7 @@ class ContraEnv(gym.Env):
             if self._idle_counter > 10:  # grace period ~0.7s
                 total_reward -= 0.5
             # Penalize LEFT at left screen edge (player X < 20px)
-            if action in _LEFT_ACTIONS and self._nes[0x334] < 20:
+            if action in _LEFT_ACTIONS and self._nes[0x334] < 30:
                 total_reward -= 0.3
         else:
             self._idle_counter = 0
@@ -321,9 +321,9 @@ class ContraEnv(gym.Env):
         }
 
     def _build_features(self) -> np.ndarray:
-        """Build 22-dim feature vector from RAM for hybrid observation."""
+        """Build 28-dim feature vector from RAM for hybrid observation."""
         nes = self._nes
-        f = np.zeros(22, dtype=np.float32)
+        f = np.zeros(28, dtype=np.float32)
 
         # Player (4 features)
         px = nes[0x334]
@@ -352,21 +352,45 @@ class ContraEnv(gym.Env):
         # Nearest 3 enemies (4 features each: dx, dy, velocity, attack delay)
         for i, (dist, ex, ey, slot) in enumerate(enemies[:3]):
             base = 4 + i * 4
-            f[base] = (ex - px + 128) / 256.0      # relative X, centered
-            f[base + 1] = (ey - py + 120) / 240.0   # relative Y, centered
-            f[base + 2] = nes[0x508 + slot] / 256.0  # X velocity
-            f[base + 3] = nes[0x558 + slot] / 256.0  # attack delay timer
+            f[base] = np.clip((ex - px + 128) / 256.0, 0.0, 1.0)
+            f[base + 1] = np.clip((ey - py + 120) / 240.0, 0.0, 1.0)
+            f[base + 2] = nes[0x508 + slot] / 256.0
+            f[base + 3] = nes[0x558 + slot] / 256.0
+
+        # Nearest 3 projectiles (score_code == 0, 2 features each: dx, dy)
+        projectiles = []
+        for slot in range(16):
+            etype = nes[0x528 + slot]
+            ehp = nes[0x578 + slot]
+            if etype == 0 and ehp == 0:
+                continue
+            score_code = nes[0x588 + slot] >> 4
+            if score_code != 0:
+                continue  # not a projectile
+            ex = nes[0x33E + slot]
+            ey = nes[0x324 + slot]
+            if ey > 230 or ey < 8 or ex < 8 or ex > 248:
+                continue
+            dist = abs(ex - px) + abs(ey - py)
+            projectiles.append((dist, ex, ey))
+
+        projectiles.sort(key=lambda p: p[0])
+
+        for i, (dist, bx, by) in enumerate(projectiles[:3]):
+            base = 16 + i * 2
+            f[base] = np.clip((bx - px + 128) / 256.0, 0.0, 1.0)
+            f[base + 1] = np.clip((by - py + 120) / 240.0, 0.0, 1.0)
 
         # Aggregate (3 features)
-        f[16] = min(len(enemies), 16) / 16.0  # num enemies on screen
-        f[17] = enemies[0][0] / 256.0 if enemies else 1.0  # nearest distance
-        f[18] = 1.0 if nes[0x8E] > 0 else 0.0  # enemy attack flag
+        f[22] = min(len(enemies), 16) / 16.0
+        f[23] = np.clip(enemies[0][0] / 400.0, 0.0, 1.0) if enemies else 1.0
+        f[24] = 1.0 if nes[0x8E] > 0 else 0.0
 
         # Player movement (3 features)
-        f[19] = (nes[0xA4] & 0x60) / 96.0  # edge fall code (bits 5-6)
-        f[20] = 1.0 if (nes[0xA0] & 0x0F) > 0 else 0.0  # jump status
+        f[25] = min((nes[0xA4] & 0x60) / 96.0, 1.0)
+        f[26] = 1.0 if (nes[0xA0] & 0x0F) > 0 else 0.0
         y_vel = nes[0xC6]
-        f[21] = (y_vel if y_vel < 128 else y_vel - 256) / 128.0 + 0.5  # Y velocity normalized
+        f[27] = np.clip((y_vel if y_vel < 128 else y_vel - 256) / 128.0 + 0.5, 0.0, 1.0)
 
         return f
 

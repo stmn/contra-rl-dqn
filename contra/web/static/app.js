@@ -11,9 +11,6 @@ let agentBitmap = null;
 let newFrameReady = false;
 let liveScroll = 0;
 let liveEpisode = 0;
-let frameCount = 0;
-let lastFpsTime = performance.now();
-let displayFps = 0;
 
 // Render loop — runs at monitor refresh rate (60fps), always smooth
 function renderLoop() {
@@ -30,15 +27,6 @@ function renderLoop() {
         }
 
         newFrameReady = false;
-
-        frameCount++;
-        const now = performance.now();
-        if (now - lastFpsTime > 1000) {
-            displayFps = frameCount;
-            frameCount = 0;
-            lastFpsTime = now;
-            $("#stream-fps").textContent = displayFps;
-        }
     }
     requestAnimationFrame(renderLoop);
 }
@@ -131,6 +119,8 @@ function formatNumber(n) {
 function updateStats(s) {
     currentEpisode = s.env0_episode || s.episode;
     $("#episode").textContent = s.episode.toLocaleString();
+    $("#header-episode").textContent = s.episode.toLocaleString();
+    $("#header-time").textContent = formatTime(s.training_time);
     $("#training-time").textContent = formatTime(s.training_time);
     $("#timesteps").textContent = `${formatNumber(s.timesteps)} / ${formatNumber(s.total_timesteps)}`;
     $("#fps").textContent = s.fps.toFixed(0);
@@ -153,6 +143,31 @@ function updateStats(s) {
 
 
     lastSeenEpisode = s.episode;
+
+    // Update action counts for Agent Output
+    if (s.action_counts) {
+        for (let i = 0; i < s.action_counts.length; i++) {
+            actionCounts[i] = s.action_counts[i];
+        }
+        totalActions = actionCounts.reduce((a, b) => a + b, 0);
+    }
+
+    // Update Agent Input features
+    if (s.features && s.features.length > 0) {
+        const grid = $("#features-grid");
+        const section = $("#features-section");
+        if (grid && section) {
+            section.style.display = "";
+            grid.innerHTML = "";
+            s.features.forEach((val, i) => {
+                const name = FEATURE_NAMES[i] || "f" + i;
+                const div = document.createElement("div");
+                div.className = "feature-item";
+                div.innerHTML = `<span class="feature-label">${name}</span><span class="feature-value">${val.toFixed(3)}</span>`;
+                grid.appendChild(div);
+            });
+        }
+    }
 }
 
 // === Chart ===
@@ -195,16 +210,6 @@ function initChart() {
                     tension: 0.4,
                     yAxisID: "y2",
                 },
-                {
-                    label: "Episode limit",
-                    data: [],
-                    borderColor: "rgba(255, 255, 255, 0.3)",
-                    borderWidth: 1,
-                    borderDash: [5, 5],
-                    pointRadius: 0,
-                    fill: false,
-                    yAxisID: "y2",
-                }
             ]
         },
         options: {
@@ -267,10 +272,6 @@ function updateChart() {
     data.datasets[0].data = visible;
     data.datasets[1].data = computeRollingAvg(visible);
     data.datasets[2].data = computeRollingAvg(visibleSurv);
-    // Set Y2 max to episode limit so the line always fills to the top
-    const limitSteps = parseInt(episodeSlider.value) * 15;
-    rewardChart.options.scales.y2.max = limitSteps;
-    data.datasets[3].data = visible.map(() => limitSteps);
     rewardChart.update();
 }
 
@@ -444,39 +445,94 @@ function updateProgressBar() {
 }
 requestAnimationFrame(updateProgressBar);
 
-// === Settings (episode length slider) ===
-const episodeSlider = $("#episode-length");
-const episodeVal = $("#episode-length-val");
-let settingsTimeout = null;
 
-// Convert seconds → steps: steps = seconds * 60fps / 2 frame_skip = seconds * 30
-const secToSteps = (sec) => Math.round(sec * 30);
-const stepsToSec = (steps) => Math.round(steps / 30);
+// === Action tracking ===
+const actionCounts = new Array(16).fill(0);
+let totalActions = 0;
 
-episodeSlider.addEventListener("input", () => {
-    episodeVal.textContent = episodeSlider.value + "s";
-});
+function updateActionBars() {
+    const container = $("#action-bars");
+    if (!container || totalActions === 0) return;
 
-episodeSlider.addEventListener("change", () => {
-    clearTimeout(settingsTimeout);
-    settingsTimeout = setTimeout(async () => {
-        await fetch("/api/settings", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ episode_length: secToSteps(parseInt(episodeSlider.value)) }),
-        });
-    }, 200);
-});
+    const colors = [
+        "#555", "#4CAF50", "#ff4444", "#888", "#888",
+        "#2196F3", "#ff9800", "#4CAF50", "#4CAF50", "#4CAF50",
+        "#ff4444", "#ff4444", "#ff9800", "#ff9800",
+        "#4CAF50", "#4CAF50"
+    ];
 
-async function loadSettings() {
-    try {
-        const res = await fetch("/api/settings");
-        const data = await res.json();
-        const sec = stepsToSec(data.episode_length);
-        episodeSlider.value = sec;
-        episodeVal.textContent = sec + "s";
-    } catch (e) { /* ignore */ }
+    container.innerHTML = "";
+    ACTIONS.forEach((name, i) => {
+        const pct = ((actionCounts[i] / totalActions) * 100);
+        const row = document.createElement("div");
+        row.className = "action-bar-row";
+        row.innerHTML = `
+            <span class="action-bar-label">${name}</span>
+            <div class="action-bar-track">
+                <div class="action-bar-fill" style="width:${pct}%;background:${colors[i]}"></div>
+            </div>
+            <span class="action-bar-pct">${pct.toFixed(1)}%</span>
+        `;
+        container.appendChild(row);
+    });
 }
+
+// Poll action stats every 3s
+setInterval(updateActionBars, 3000);
+
+// === Tabs ===
+document.querySelectorAll(".tab").forEach(tab => {
+    tab.addEventListener("click", () => {
+        document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+        document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
+        tab.classList.add("active");
+        document.getElementById("tab-" + tab.dataset.tab).classList.add("active");
+    });
+});
+
+// === Agent Input tab ===
+const ACTIONS = [
+    "NOOP", "Right", "Left", "Up", "Down", "Jump",
+    "Shoot", "Right+Jump", "Right+Shoot", "Right+Jump+Shoot",
+    "Left+Jump", "Left+Shoot", "Up+Shoot", "Down+Shoot",
+    "Right+Up+Shoot", "Right+Down+Shoot"
+];
+
+const agentCanvas = $("#agent-input-canvas");
+const agentCtx = agentCanvas ? agentCanvas.getContext("2d") : null;
+
+const FEATURE_NAMES = [
+    "Player X", "Player Y", "Alive", "In air",
+    "Enemy1 dX", "Enemy1 dY", "Enemy1 velX", "Enemy1 atkDelay",
+    "Enemy2 dX", "Enemy2 dY", "Enemy2 velX", "Enemy2 atkDelay",
+    "Enemy3 dX", "Enemy3 dY", "Enemy3 velX", "Enemy3 atkDelay",
+    "Bullet1 dX", "Bullet1 dY",
+    "Bullet2 dX", "Bullet2 dY",
+    "Bullet3 dX", "Bullet3 dY",
+    "Enemies count", "Nearest dist", "Attack flag",
+    "Edge fall", "Jump status", "Y velocity"
+];
+
+// Populate actions list
+const actionsList = $("#actions-list");
+if (actionsList) {
+    ACTIONS.forEach((name, i) => {
+        const div = document.createElement("div");
+        div.className = "action-item";
+        div.id = "action-" + i;
+        div.textContent = i + ": " + name;
+        actionsList.appendChild(div);
+    });
+}
+
+// Update agent view in tab (use the same agentBitmap from frame WS)
+function updateAgentInput() {
+    if (agentCtx && agentBitmap) {
+        agentCtx.drawImage(agentBitmap, 0, 0, 128, 128);
+    }
+    requestAnimationFrame(updateAgentInput);
+}
+requestAnimationFrame(updateAgentInput);
 
 // === Admin mode (auto-detect local network) ===
 fetch("/api/is-admin").then(r => r.json()).then(d => {
@@ -490,4 +546,3 @@ initChart();
 connectFrameWS();
 connectStatsWS();
 loadHistory();
-loadSettings();

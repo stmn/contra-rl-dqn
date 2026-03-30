@@ -36,14 +36,17 @@ class StreamCapture(gym.Wrapper):
         obs, reward, terminated, truncated, info = self.env.step(action)
         raw = self.env.unwrapped._raw_frame
         frame = _get_image(obs)
-        self._fb.write_env(self._env_id, frame, info.get("scroll", 0), raw_frame=raw)
+        # Always build features from env for dashboard (even if not hybrid mode)
+        features = self.env.unwrapped._build_features() if hasattr(self.env.unwrapped, '_build_features') else None
+        self._fb.write_env(self._env_id, frame, info.get("scroll", 0), raw_frame=raw, features=features)
         return obs, reward, terminated, truncated, info
 
     def reset(self, **kwargs):
         obs, info = self.env.reset(**kwargs)
         raw = self.env.unwrapped._raw_frame
         frame = _get_image(obs)
-        self._fb.write_env(self._env_id, frame, info.get("scroll", 0), raw_frame=raw)
+        features = obs.get("features") if isinstance(obs, dict) else None
+        self._fb.write_env(self._env_id, frame, info.get("scroll", 0), raw_frame=raw, features=features)
         return obs, info
 
 

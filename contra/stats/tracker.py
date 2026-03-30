@@ -76,7 +76,7 @@ class StatsTracker:
         self._reward_history: list[float] = []
         self._survival_history: list[int] = []
         self._recent_timeouts: list[bool] = []  # last 50 episodes: True = hit limit
-        self._episode_length: int = 600  # steps, synced from web controls
+        self._episode_length: int = 18_000  # 10 min safety net
         self._rollback_count: int = 0
         self._last_rollback_time: float = 0.0
         self._last_autosave_time: float = 0.0

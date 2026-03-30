@@ -50,7 +50,7 @@ class QNetwork(nn.Module):
 class HybridQNetwork(nn.Module):
     """CNN + RAM features Q-network."""
 
-    def __init__(self, n_actions: int, n_features: int = 22) -> None:
+    def __init__(self, n_actions: int, n_features: int = 28) -> None:
         super().__init__()
         self.cnn = nn.Sequential(
             nn.Conv2d(4, 32, 8, stride=4),
@@ -358,9 +358,12 @@ class DQNTrainer:
         q_values = self._q_values(self.q_network, states_img, states_feat)
         q_values = q_values.gather(1, actions_t.unsqueeze(1)).squeeze(1)
 
-        # Target Q
+        # Target Q (Double DQN: online network selects action, target network evaluates)
         with torch.no_grad():
-            next_q = self._q_values(self.target_network, next_img, next_feat).max(dim=1).values
+            next_q_online = self._q_values(self.q_network, next_img, next_feat)
+            best_actions = next_q_online.argmax(dim=1, keepdim=True)
+            next_q_target = self._q_values(self.target_network, next_img, next_feat)
+            next_q = next_q_target.gather(1, best_actions).squeeze(1)
             target = rewards_t + self.gamma * next_q * (1 - dones_t)
 
         # TD error
@@ -415,6 +418,10 @@ class DQNTrainer:
             done = terminated or truncated
             ep_reward += reward
             ep_steps += 1
+
+            # Track action usage
+            if self.frame_buffer and action < len(self.frame_buffer.action_counts):
+                self.frame_buffer.action_counts[action] += 1
 
             # Update max scroll
             if self.frame_buffer and self.frame_buffer.tracker:

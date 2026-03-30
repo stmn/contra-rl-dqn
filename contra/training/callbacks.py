@@ -31,11 +31,13 @@ class SharedFrameBuffer:
         self._active_env: int = 0
         self.env0_episode: int = 0
         self.env0_scroll: int = 0
+        self.env0_features: list[float] = []
+        self.action_counts: list[int] = [0] * 16
         self.tracker = None
         self._env_frame_buffers: list[list] = [[] for _ in range(num_envs)]  # raw frames for replay
         self._best_reward: float = float("-inf")
 
-    def write_env(self, env_id: int, frame: np.ndarray, scroll: int = 0, raw_frame=None) -> None:
+    def write_env(self, env_id: int, frame: np.ndarray, scroll: int = 0, raw_frame=None, features=None) -> None:
         """Write frame for a specific env. Only copies frame data for active env."""
         self._scrolls[env_id] = scroll
         # Record RAW frames for replay (without overlay)
@@ -46,6 +48,8 @@ class SharedFrameBuffer:
                 self._frame = frame.copy()
                 self._raw_frame = raw_frame.copy() if raw_frame is not None else frame.copy()
                 self.env0_scroll = scroll
+                if features is not None:
+                    self.env0_features = features.tolist()
 
     def set_active(self, env_id: int) -> None:
         self._active_env = env_id
