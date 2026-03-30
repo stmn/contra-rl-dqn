@@ -164,16 +164,19 @@ class SumTree:
 class PrioritisedReplayBuffer:
     """Prioritised Experience Replay using SumTree."""
 
-    def __init__(self, capacity: int = 100_000, alpha: float = 0.6, beta_start: float = 0.4) -> None:
+    def __init__(self, capacity: int = 100_000, alpha: float = 0.6, beta_start: float = 0.4,
+                 total_steps: int = 100_000_000, train_freq: int = 4) -> None:
         self._tree = SumTree(capacity)
         self._alpha = alpha
         self._beta = beta_start
-        self._beta_increment = 1e-6
+        n_training_steps = total_steps // train_freq
+        self._beta_increment = (1.0 - beta_start) / max(n_training_steps, 1)
         self._epsilon = 1e-6
 
     def push(self, state, action, reward, next_state, done) -> None:
+        # max_priority is already alpha-exponentiated from update_priorities(), use directly
         priority = self._tree.max_priority if len(self._tree) > 0 else 1.0
-        self._tree.add(priority ** self._alpha, (state, action, reward, next_state, done))
+        self._tree.add(priority, (state, action, reward, next_state, done))
 
     def sample(self, batch_size: int):
         batch = []
@@ -275,13 +278,15 @@ class DQNTrainer:
 
         # Replay buffer
         if self._per:
-            self.replay_buffer = PrioritisedReplayBuffer(self.buffer_size)
+            self.replay_buffer = PrioritisedReplayBuffer(
+                self.buffer_size, total_steps=self.total_timesteps, train_freq=self.train_freq)
         else:
             self.replay_buffer = ReplayBuffer(self.buffer_size)
 
         # Stability
         self._checkpoint_dir = Path("checkpoints")
         self._checkpoint_dir.mkdir(parents=True, exist_ok=True)
+        self._global_step: int = 0
         self._avg_window: list[float] = []
         self._peak_avg: float = 0.0
         self._rollback_count: int = 0
@@ -391,11 +396,12 @@ class DQNTrainer:
         obs, info = self.env.reset()
         ep_reward = 0.0
         ep_steps = 0
-        global_step = 0
+        start_step = self._global_step
         start_time = time.time()
         loss = 0.0
 
-        for global_step in range(1, self.total_timesteps + 1):
+        for global_step in range(start_step + 1, self.total_timesteps + 1):
+            self._global_step = global_step
             # Controls
             if self.controls:
                 while self.controls.paused:
@@ -533,6 +539,9 @@ class DQNTrainer:
             "q_network": self.q_network.state_dict(),
             "target_network": self.target_network.state_dict(),
             "optimizer": self.optimizer.state_dict(),
+            "global_step": self._global_step,
+            "peak_avg": self._peak_avg,
+            "rollback_count": self._rollback_count,
         }, path)
 
     def load(self, path: str) -> None:
@@ -540,3 +549,9 @@ class DQNTrainer:
         self.q_network.load_state_dict(checkpoint["q_network"])
         self.target_network.load_state_dict(checkpoint["target_network"])
         self.optimizer.load_state_dict(checkpoint["optimizer"])
+        if "global_step" in checkpoint:
+            self._global_step = checkpoint["global_step"]
+        if "peak_avg" in checkpoint:
+            self._peak_avg = checkpoint["peak_avg"]
+        if "rollback_count" in checkpoint:
+            self._rollback_count = checkpoint["rollback_count"]
