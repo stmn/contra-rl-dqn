@@ -339,6 +339,8 @@ function updateRewardTable(rewards, survival, startEp) {
     const bucketSize = rollingWindow;
     tbody.innerHTML = "";
 
+    // Build rows newest-first
+    const rows = [];
     for (let i = 0; i < rewards.length; i += bucketSize) {
         const chunk = rewards.slice(i, i + bucketSize);
         const survChunk = survival.slice(i, i + bucketSize);
@@ -347,17 +349,9 @@ function updateRewardTable(rewards, survival, startEp) {
         const best = Math.max(...chunk);
         const epFrom = startEp + i + 1;
         const epTo = startEp + Math.min(i + bucketSize, rewards.length);
-
-        const tr = document.createElement("tr");
-        tr.innerHTML = `
-            <td>${epFrom}–${epTo}</td>
-            <td>${avg.toFixed(1)}</td>
-            <td>${avgSurv.toFixed(0)}</td>
-            <td>${best.toFixed(1)}</td>
-            <td>${chunk.length}</td>
-        `;
-        tbody.appendChild(tr);
+        rows.push(`<tr><td>${epFrom}–${epTo}</td><td>${avg.toFixed(1)}</td><td>${avgSurv.toFixed(0)}</td><td>${best.toFixed(1)}</td><td>${chunk.length}</td></tr>`);
     }
+    tbody.innerHTML = rows.reverse().join("");
 }
 
 function addRewardPoint(episode, reward) {
