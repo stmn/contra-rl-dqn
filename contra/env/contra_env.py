@@ -333,18 +333,18 @@ class ContraEnv(gym.Env):
                 etype = self._nes[0x528 + slot]
                 ex = self._nes[0x33E + slot]
                 ey = self._nes[0x324 + slot]
-                total_reward += 50.0
-                self._reward_turret += 50.0
-                self._turret_hits += 1
                 _HIT_NAMES = {4:"Rotating Gun",7:"Red Turret",8:"Wall Cannon",0x0E:"Turret Man",
                               0x10:"Boss Turret",0x11:"Boss Door"}
                 hit_name = _HIT_NAMES.get(etype)
                 if hit_name:
+                    total_reward += 50.0
+                    self._reward_turret += 50.0
+                    self._turret_hits += 1
                     self._events.append((self._step_count,
                         f"Turret hit {hit_name} +50 HP {prev_hp}→{hp}"))
                 else:
                     self._events.append((self._step_count,
-                        f"Turret hit type={etype} +50 HP {prev_hp}→{hp} pos=({ex},{ey})"))
+                        f"Unknown event type={etype} slot={slot} HP {prev_hp}→{hp} pos=({ex},{ey})"))
             self._prev_enemy_hp[slot] = hp
 
         # Weapon pickup reward
