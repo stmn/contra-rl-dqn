@@ -17,6 +17,11 @@ header {
     align-items: center;
     justify-content: space-between;
     padding: 14px 24px;
+    max-width: 1400px;
+    margin: 0 auto;
+}
+
+.header-wrap {
     background: linear-gradient(180deg, #12121a 0%, #0d0d14 100%);
     border-bottom: 1px solid #1e1e2e;
 }
