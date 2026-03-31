@@ -48,6 +48,7 @@ RAM_PLAYER_MODE = 0x0022   # 0=1P, 1=2P
 RAM_SCROLL_HI = 0x0060     # camera scroll coarse (tiles, wraps 0-255)
 RAM_SCROLL_LO = 0x0065     # camera scroll fine (pixels within tile)
 RAM_SCORE = 0x07E2         # Player 1 score (2 bytes, low byte)
+RAM_ENEMY_HP_BASE = 0x0580 # Enemy HP per slot (16 slots), counts down to 0 = destroyed
 
 # Action categories for reward shaping
 _RIGHT_ACTIONS = frozenset(i for i, a in enumerate(ACTIONS) if a & BUTTON_RIGHT)
@@ -106,6 +107,7 @@ class ContraEnv(gym.Env):
         self._prev_score = 0
         self._saved_game_state: np.ndarray | None = None
         self._practice = False
+        self._prev_enemy_hp = [0] * 16  # track $580+slot for turret hit reward
 
         # Reward breakdown counters
         self._reward_scroll = 0.0
@@ -207,6 +209,7 @@ class ContraEnv(gym.Env):
         self._prev_score = self._nes[RAM_SCORE] + self._nes[RAM_SCORE + 1] * 256
         self._reward_death = 0.0
         self._death_count = 0
+        self._prev_enemy_hp = [self._nes[RAM_ENEMY_HP_BASE + s] for s in range(16)]
         frame = self._nes.step(1)
         self._last_frame = frame.copy()
         info = self._get_info()
@@ -294,6 +297,14 @@ class ContraEnv(gym.Env):
         if 0 < score_delta < 100:  # sanity check
             total_reward += score_delta * 15.0
         self._prev_score = score
+
+        # Turret hit reward — $580+slot counts down when turret takes damage
+        for slot in range(16):
+            hp = self._nes[RAM_ENEMY_HP_BASE + slot]
+            prev_hp = self._prev_enemy_hp[slot]
+            if 0 < hp < prev_hp <= 20:  # HP decreased, sane range (turrets have ~7-8 HP)
+                total_reward += 50.0  # reward per hit
+            self._prev_enemy_hp[slot] = hp
 
         # Idle penalty: standing still = negative reward (skip during death/respawn)
         if scroll_delta == 0 and self._nes[RAM_PLAYER_STATE] == 1:

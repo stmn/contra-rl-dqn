@@ -70,5 +70,18 @@ while true do
     end
 
     joypad.set(1, ACTION_MAP[action] or {})
+
+    -- Show $580-$58F values on screen
+    local line = ""
+    for slot = 0, 15 do
+        local val = memory.readbyte(0x580 + slot)
+        if val > 0 then
+            line = line .. slot .. ":" .. val .. " "
+        end
+    end
+    if line ~= "" then
+        gui.text(2, 8, "$580: " .. line, "yellow", "black")
+    end
+
     emu.frameadvance()
 end

@@ -29,6 +29,7 @@ Enemy positions and bullets are read directly from NES RAM and drawn onto the ga
 | Screen scroll | `scroll_delta * 0.08 * speed_bonus` | Progress through the level |
 | Enemy kill | `score_delta * 15` | Incentivize shooting |
 | Death | `-500` | Avoid enemies and bullets |
+| Turret hit | `+50` | Reward each bullet that damages a turret |
 | Standing still (>0.7s) | `-0.5 / step` | Don't idle |
 
 ### Training Progress
@@ -167,7 +168,9 @@ Discovered through systematic RAM scanning with cynes (full NES RAM map: [Data C
 | `$33E-$347` | Enemy X positions | 16 slots |
 | `$324-$32D` | Enemy Y positions | 16 slots |
 | `$528` | Enemy types | 16 slots |
-| `$578` | Enemy HP | 16 slots |
+| `$578` | Enemy HP (old) | 16 slots, not actual HP — use $580 instead |
+| `$580` | Enemy HP | 16 slots, counts DOWN per hit (e.g. turret: 7→0 = destroyed) |
+| `$504` | Turret rotation | 8 directions (0/32/64/96/128/160/192/224) |
 | `$508` | Enemy X velocity | For static vs moving detection |
 
 **Important**: cynes uses reversed bit order for controller input (`NES_INPUT_RIGHT=1`, `NES_INPUT_A=128`).
