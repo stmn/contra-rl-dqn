@@ -405,6 +405,9 @@ class DQNTrainer:
             # Controls
             if self.controls:
                 while self.controls.paused:
+                    if self.controls.step_once:
+                        self.controls.step_once = False
+                        break
                     time.sleep(0.1)
                 if self.controls.consume_save() and self.on_save:
                     self.on_save()
@@ -508,6 +511,13 @@ class DQNTrainer:
                     self.frame_buffer.env0_episode += 1
                     if not is_practice:
                         self.frame_buffer.on_episode_done(0, ep_reward)
+
+                # Wait if auto-restart is disabled
+                if self.controls and not self.controls.auto_restart:
+                    self.controls.waiting_restart = True
+                    while not self.controls.auto_restart and not self.controls.consume_restart():
+                        time.sleep(0.1)
+                    self.controls.waiting_restart = False
 
                 obs, info = self.env.reset()
                 ep_reward = 0.0
