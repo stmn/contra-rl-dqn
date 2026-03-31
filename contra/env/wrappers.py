@@ -62,7 +62,7 @@ class StreamCapture(gym.Wrapper):
                 ex, ey = int(nes[0x33E + slot]), int(nes[0x324 + slot])
                 if ey > 230 or ey < 8 or ex < 24 or ex > 240:
                     continue
-                turret_hp = int(nes[0x580 + slot])
+                turret_hp = int(nes[0x578 + slot])
                 dist = abs(ex - px) + abs(ey - py)
                 if etype in _BULLET_TYPES:
                     visible_bullets.append({"x": ex, "y": ey, "dist": dist})
