@@ -48,33 +48,40 @@
         </section>
 
         <section class="stats-panel">
-            <div class="controls admin-only" style="display:none">
-                <button id="btn-pause" onclick="togglePause()" data-tippy-content="Pause or resume training. Agent stops making decisions.">
-                    <i data-lucide="pause" class="icon-btn"></i> Pause
-                </button>
-                <button id="btn-restart" onclick="restartGame()" data-tippy-content="Force current episode to end and start a new one from the beginning.">
-                    <i data-lucide="rotate-ccw" class="icon-btn"></i> Restart
-                </button>
-                <button id="btn-save" onclick="saveCheckpoint()" data-tippy-content="Save neural network weights to disk. Use to create a manual checkpoint.">
-                    <i data-lucide="hard-drive-download" class="icon-btn"></i> Save Model
-                </button>
-                <button id="btn-replay" onclick="playBestRun()" data-tippy-content="Watch a recording of the best run so far.">
-                    <i data-lucide="play" class="icon-btn"></i> Best Replay
-                </button>
-            </div>
-            <div class="controls admin-only" style="display:none;margin-top:6px">
-                <button id="btn-save-state" onclick="saveGameState()" data-tippy-content="Save current game moment. Agent will respawn here after every death instead of restarting the level. Stats won't be recorded (practice mode).">
-                    <i data-lucide="bookmark-plus" class="icon-btn"></i> Save State
-                </button>
-                <button id="btn-clear-state" onclick="clearGameState()" style="display:none" data-tippy-content="Remove saved game state. Agent goes back to normal training from level start.">
-                    <i data-lucide="bookmark-x" class="icon-btn"></i> Clear State
-                </button>
+            <div class="controls-grid admin-only" style="display:none">
+                <div class="control-group">
+                    <button id="btn-pause" onclick="togglePause()" data-tippy-content="Pause or resume training.">
+                        <i data-lucide="pause" class="icon-btn"></i> Pause
+                    </button>
+                    <button id="btn-auto-restart" onclick="toggleAutoRestart()" class="active" data-tippy-content="Auto-restart after game over. Disable to freeze and inspect Run Log.">
+                        <i data-lucide="repeat" class="icon-btn"></i> Loop
+                    </button>
+                    <button id="btn-restart" onclick="restartGame()" data-tippy-content="Force episode end, start new game.">
+                        <i data-lucide="rotate-ccw" class="icon-btn"></i> Reset
+                    </button>
+                </div>
+                <div class="control-group">
+                    <button id="btn-save" onclick="saveCheckpoint()" data-tippy-content="Save neural network weights to disk.">
+                        <i data-lucide="hard-drive-download" class="icon-btn"></i> Checkpoint
+                    </button>
+                    <button id="btn-replay" onclick="playBestRun()" data-tippy-content="Watch recording of the best run.">
+                        <i data-lucide="play" class="icon-btn"></i> Best Run
+                    </button>
+                </div>
+                <div class="control-group">
+                    <button id="btn-save-state" onclick="saveGameState()" data-tippy-content="Save game moment. Agent respawns here after death (practice mode).">
+                        <i data-lucide="bookmark-plus" class="icon-btn"></i> Practice
+                    </button>
+                    <button id="btn-clear-state" onclick="clearGameState()" style="display:none" data-tippy-content="Exit practice mode, back to normal training.">
+                        <i data-lucide="bookmark-x" class="icon-btn"></i> End Practice
+                    </button>
+                </div>
             </div>
             <div class="tabs">
                 <button class="tab active" data-tab="training"><i data-lucide="cpu" class="icon-btn"></i> Training</button>
                 <button class="tab" data-tab="top-runs"><i data-lucide="trophy" class="icon-btn"></i> Top Runs</button>
-                <button class="tab" data-tab="agent-input"><i data-lucide="brain" class="icon-btn"></i> Agent Input</button>
-                <button class="tab" data-tab="agent-output"><i data-lucide="activity" class="icon-btn"></i> Agent Output</button>
+                <button class="tab" data-tab="agent-output"><i data-lucide="activity" class="icon-btn"></i> Actions</button>
+                <button class="tab" data-tab="run-log"><i data-lucide="scroll-text" class="icon-btn"></i> Run Log</button>
                 <button class="tab" data-tab="config"><i data-lucide="settings" class="icon-btn"></i> Config</button>
             </div>
 
@@ -142,14 +149,30 @@
             </div>
             </div>
 
-            <div class="tab-content" id="tab-agent-input">
-            <div class="stat-group">
-                <h2><i data-lucide="brain" class="icon-heading"></i> Agent Input <span data-tippy-content="Raw data the agent receives each frame: pixel image + numerical features extracted from NES RAM (enemy positions, distances, velocities)." class="tip-left" style="font-weight:400;font-size:10px;cursor:help;color:#555">(?)</span></h2>
-                <div class="agent-input-section" id="features-section" style="display:none">
-                    <h3>RAM Features (28 values)</h3>
-                    <div class="features-grid" id="features-grid"></div>
+
+            <div class="tab-content" id="tab-run-log">
+                <div class="subtabs">
+                    <button class="subtab active" data-subtab="rewards" onclick="switchSubTab(this)">Rewards</button>
+                    <button class="subtab" data-subtab="events" onclick="switchSubTab(this)">Events</button>
+                    <button class="subtab" data-subtab="agent-view" onclick="switchSubTab(this)">Agent View</button>
+                    <button class="subtab" data-subtab="features" onclick="switchSubTab(this)">Features</button>
                 </div>
-            </div>
+                <div class="subtab-body">
+                    <div class="subtab-content active" id="subtab-rewards">
+                        <div id="run-log-breakdown"></div>
+                    </div>
+                    <div class="subtab-content" id="subtab-events">
+                        <div id="run-log-events" style="font-size:11px;font-family:monospace;max-height:400px;overflow-y:auto"></div>
+                    </div>
+                    <div class="subtab-content" id="subtab-agent-view">
+                        <div id="agent-view-text" style="font-size:12px;font-family:monospace"></div>
+                    </div>
+                    <div class="subtab-content" id="subtab-features">
+                        <div class="agent-input-section" id="features-section" style="display:none">
+                            <div class="features-grid" id="features-grid"></div>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <div class="tab-content" id="tab-config">

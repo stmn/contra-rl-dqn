@@ -1,4 +1,5 @@
 const $ = (sel) => document.querySelector(sel);
+const WEAPONS = ["Default","Machine Gun","Fireball","Spread","Laser","Barrier"];
 
 // === Frame WebSocket + requestAnimationFrame rendering ===
 const canvas = $("#game-canvas");
@@ -147,6 +148,27 @@ function updateStats(s) {
         $("#autosave-ago").textContent = min > 0 ? `${min}m ${sec}s ago` : `${sec}s ago`;
     }
 
+    // Sync pause button state
+    const btnPause = $("#btn-pause");
+    if (btnPause && s.paused !== undefined) {
+        btnPause.textContent = s.paused ? "Resume" : "Pause";
+        btnPause.classList.toggle("active", s.paused);
+    }
+
+    // Sync auto-restart button
+    const btnAR = $("#btn-auto-restart");
+    if (btnAR && s.auto_restart !== undefined) {
+        btnAR.classList.toggle("active", s.auto_restart);
+    }
+
+    // Show "Waiting..." on restart button when waiting for manual restart
+    const btnRestart = $("#btn-restart");
+    if (btnRestart && s.waiting_restart) {
+        btnRestart.classList.add("active");
+    } else if (btnRestart) {
+        btnRestart.classList.remove("active");
+    }
+
     // Practice mode indicator
     const practiceBadge = $("#practice-badge");
     if (practiceBadge) {
@@ -167,6 +189,84 @@ function updateStats(s) {
             actionCounts[i] = s.action_counts[i];
         }
         totalActions = actionCounts.reduce((a, b) => a + b, 0);
+    }
+
+    // Update Run Log
+    if (s.run_log) {
+        const r = s.run_log;
+        const bd = $("#run-log-breakdown");
+        if (bd) {
+            bd.innerHTML = `
+                <div class="stat-row"><span class="stat-label">Step</span><span class="stat-value">${r.step || 0}</span></div>
+                <div class="stat-row"><span class="stat-label">Total reward</span><span class="stat-value">${(r.total_reward || 0).toFixed(0)}</span></div>
+                <div class="stat-row"><span class="stat-label">Scroll</span><span class="stat-value">${r.scroll || 0}</span></div>
+                <div class="stat-row"><span class="stat-label">Deaths</span><span class="stat-value">${r.deaths || 0}</span></div>
+                <div class="stat-row" style="margin-top:8px;border-top:1px solid #1a1a24;padding-top:8px">
+                    <span class="stat-label" style="color:#4CAF50">Scroll reward</span>
+                    <span class="stat-value" style="color:#4CAF50">+${(r.reward_scroll || 0).toFixed(0)}</span>
+                </div>
+                <div class="stat-row"><span class="stat-label" style="color:#ff9800">Kill reward</span><span class="stat-value" style="color:#ff9800">+${(r.reward_kills || 0).toFixed(0)}</span></div>
+                <div class="stat-row"><span class="stat-label" style="color:#2196F3">Turret/Boss hits</span><span class="stat-value" style="color:#2196F3">+${(r.reward_turret || 0).toFixed(0)} (${r.turret_hits || 0} hits)</span></div>
+                <div class="stat-row"><span class="stat-label" style="color:#e040fb">Weapon upgrade</span><span class="stat-value" style="color:#e040fb">+${(r.reward_weapon || 0).toFixed(0)}</span></div>
+                <div class="stat-row"><span class="stat-label" style="color:#ff4444">Death penalty</span><span class="stat-value" style="color:#ff4444">${(r.reward_death || 0).toFixed(0)}</span></div>
+                <div class="stat-row"><span class="stat-label" style="color:#888">Idle penalty</span><span class="stat-value" style="color:#888">${(r.reward_idle || 0).toFixed(0)}</span></div>
+            `;
+        }
+        const ev = $("#run-log-events");
+        if (ev && r.events) {
+            ev.innerHTML = r.events.map(e =>
+                `<div style="padding:2px 0;color:${e[1].startsWith('Death') ? '#ff4444' : e[1].startsWith('Turret') ? '#2196F3' : '#ff9800'}">` +
+                `<span style="color:#555">Step ${e[0]}</span> ${e[1]}</div>`
+            ).reverse().join("");
+        }
+        const av = $("#agent-view-text");
+        if (av) {
+            const p = r.player || {x:0, y:0, weapon:0};
+            const weaponName = WEAPONS[p.weapon] || "Unknown";
+            let html = `<div style="color:#4CAF50;margin-bottom:4px">Player: (${p.x}, ${p.y})</div>`;
+            html += `<div style="color:#4CAF50;margin-bottom:8px">Weapon: ${weaponName}</div>`;
+
+            const ENEMY_TYPES = {1:"Bullet",2:"Weapon Box",3:"Flying Bonus",4:"Rotating Gun",5:"Soldier",6:"Sniper",7:"Red Turret",8:"Wall Cannon",11:"Mortar",12:"Scuba Diver",14:"Turret Man",15:"Turret Bullet",16:"Boss Turret",17:"Boss Door",18:"Bridge"};
+            const enemies = r.enemies || [];
+            const known = enemies.filter(e => ENEMY_TYPES[e.type]);
+            const unknown = enemies.filter(e => !ENEMY_TYPES[e.type]);
+            html += `<div style="color:#ff9800;margin-bottom:4px">Enemies visible: ${enemies.length}</div>`;
+            known.forEach((e, i) => {
+                const name = ENEMY_TYPES[e.type];
+                const hpStr = e.hp > 1 ? ` hp=${e.hp}` : '';
+                html += `<div style="padding:2px 0 2px 12px;color:#ccc">${name} pos=(${e.x},${e.y}) dist=${e.dist}${hpStr}</div>`;
+            });
+            if (unknown.length > 0) {
+                html += `<div style="color:#ff6600;margin:4px 0 4px 0">Unknown types: ${unknown.length}</div>`;
+                unknown.forEach((e) => {
+                    const hpStr = e.hp > 1 ? ` hp=${e.hp}` : '';
+                    html += `<div style="padding:2px 0 2px 12px;color:#ff6600">type=${e.type} pos=(${e.x},${e.y}) dist=${e.dist}${hpStr}</div>`;
+                });
+            }
+
+            const bullets = r.bullets || [];
+            html += `<div style="color:#ff4444;margin:8px 0 4px">Bullets visible: ${bullets.length}</div>`;
+            bullets.forEach((b, i) => {
+                html += `<div style="padding:2px 0 2px 12px;color:#ccc">` +
+                    `#${i+1} pos=(${b.x},${b.y}) dist=${b.dist}</div>`;
+            });
+
+            const OTHER_TYPES = {2:"Weapon Box",3:"Flying Bonus",18:"Bridge"};
+            const other = r.other || [];
+            if (other.length > 0) {
+                html += `<div style="color:#888;margin:8px 0 4px">Other visible: ${other.length}</div>`;
+                other.forEach((o) => {
+                    let name = OTHER_TYPES[o.type] || `type=${o.type}`;
+                    if (o.weapon !== undefined) name += ` (${WEAPONS[o.weapon] || '?'})`;
+                    html += `<div style="padding:2px 0 2px 12px;color:#888">${name} pos=(${o.x},${o.y}) dist=${o.dist}</div>`;
+                });
+            }
+
+            if (enemies.length === 0 && bullets.length === 0 && other.length === 0) {
+                html += `<div style="color:#555;margin-top:8px">No entities on screen</div>`;
+            }
+            av.innerHTML = html;
+        }
     }
 
     // Update Agent Input features
@@ -429,11 +529,12 @@ async function restartGame() {
 async function saveCheckpoint() {
     await fetch("/api/save", { method: "POST" });
     $("#btn-save").textContent = "Saving...";
-    setTimeout(() => { $("#btn-save").textContent = "Save Model"; }, 2000);
+    setTimeout(() => { $("#btn-save").textContent = "Checkpoint"; }, 2000);
 }
 
 async function playBestRun() {
     $("#btn-replay").textContent = "Loading...";
+
     const res = await fetch("/api/play-best", { method: "POST" });
     const data = await res.json();
     if (data.ok) {
@@ -441,7 +542,14 @@ async function playBestRun() {
     } else {
         alert(data.message || "No replay available");
     }
-    $("#btn-replay").textContent = "Best Replay";
+    $("#btn-replay").textContent = "Best Run";
+}
+
+async function toggleAutoRestart() {
+    const res = await fetch("/api/auto-restart", { method: "POST" });
+    const data = await res.json();
+    const btn = $("#btn-auto-restart");
+    btn.classList.toggle("active", data.auto_restart);
 }
 
 async function saveGameState() {
@@ -601,15 +709,16 @@ const agentCanvas = $("#agent-input-canvas");
 const agentCtx = agentCanvas ? agentCanvas.getContext("2d") : null;
 
 const FEATURE_NAMES = [
-    "Player X", "Player Y", "Alive", "In air",
-    "Enemy1 dX", "Enemy1 dY", "Enemy1 velX", "Enemy1 atkDelay",
-    "Enemy2 dX", "Enemy2 dY", "Enemy2 velX", "Enemy2 atkDelay",
-    "Enemy3 dX", "Enemy3 dY", "Enemy3 velX", "Enemy3 atkDelay",
+    "Player X", "Player Y", "Weapon", "In air",
+    "Enemy1 dX", "Enemy1 dY", "Enemy1 velX", "Enemy1 HP",
+    "Enemy2 dX", "Enemy2 dY", "Enemy2 velX", "Enemy2 HP",
+    "Enemy3 dX", "Enemy3 dY", "Enemy3 velX", "Enemy3 HP",
     "Bullet1 dX", "Bullet1 dY",
     "Bullet2 dX", "Bullet2 dY",
     "Bullet3 dX", "Bullet3 dY",
-    "Enemies count", "Nearest dist", "Attack flag",
-    "Edge fall", "Jump status", "Y velocity"
+    "Enemies count", "Nearest dist", "Invincible",
+    "Edge fall", "Y velocity",
+    "Level progress"
 ];
 
 // Populate actions list
@@ -705,6 +814,27 @@ async function loadConfig() {
         el.innerHTML = '<div class="stat-row"><span class="stat-label">Config unavailable — deploy new code to server</span></div>';
     }
 }
+
+// === Sub-tabs (Run Log) ===
+function switchSubTab(btn) {
+    const parent = btn.closest(".tab-content");
+    parent.querySelectorAll(".subtab").forEach(t => t.classList.remove("active"));
+    parent.querySelectorAll(".subtab-content").forEach(c => c.classList.remove("active"));
+    btn.classList.add("active");
+    document.getElementById("subtab-" + btn.dataset.subtab).classList.add("active");
+}
+
+// === Keyboard shortcuts (admin only) ===
+document.addEventListener("keydown", (e) => {
+    if (e.target.matches("input, textarea")) return;
+    if (e.code === "Space") {
+        e.preventDefault();
+        togglePause();
+    } else if (e.code === "ArrowRight") {
+        e.preventDefault();
+        fetch("/api/step", { method: "POST" });
+    }
+});
 
 // === Init ===
 initChart();

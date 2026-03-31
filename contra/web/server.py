@@ -49,6 +49,9 @@ class TrainingControls:
         self.save_state_requested = False
         self.clear_state_requested = False
         self.practice_mode = False
+        self.auto_restart = True
+        self.waiting_restart = False
+        self.step_once = False
         self.episode_length = 18_000  # 10 min safety net
         self.num_envs = 8
 
@@ -208,6 +211,26 @@ async def save_game_state(request: Request):
     return JSONResponse({"ok": False}, status_code=503)
 
 
+@app.post("/api/step")
+async def step_once(request: Request):
+    if not _is_local(request):
+        return JSONResponse({"ok": False}, status_code=403)
+    if _controls:
+        _controls.step_once = True
+        return {"ok": True}
+    return JSONResponse({"ok": False}, status_code=503)
+
+
+@app.post("/api/auto-restart")
+async def toggle_auto_restart(request: Request):
+    if not _is_local(request):
+        return JSONResponse({"ok": False}, status_code=403)
+    if _controls:
+        _controls.auto_restart = not _controls.auto_restart
+        return {"ok": True, "auto_restart": _controls.auto_restart}
+    return JSONResponse({"ok": False}, status_code=503)
+
+
 @app.post("/api/clear-state")
 async def clear_game_state(request: Request):
     if not _is_local(request):
@@ -335,10 +358,13 @@ async def ws_stats(ws: WebSocket):
                 if _controls:
                     d["paused"] = _controls.paused
                     d["practice"] = _controls.practice_mode
+                    d["auto_restart"] = _controls.auto_restart
+                    d["waiting_restart"] = _controls.waiting_restart
                 if _frame_buffer:
                     d["env0_episode"] = _frame_buffer.env0_episode
                     d["features"] = _frame_buffer.env0_features
                     d["action_counts"] = _frame_buffer.action_counts
+                    d["run_log"] = _frame_buffer.env0_run_log
                 msg["stats"] = d
             await ws.send_json(msg)
             await asyncio.sleep(0.5)

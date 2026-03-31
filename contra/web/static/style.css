@@ -139,18 +139,37 @@ main {
 }
 
 /* === Controls === */
+.controls-grid {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.control-group {
+    display: flex;
+    gap: 4px;
+    padding-right: 10px;
+    border-right: 1px solid #1e1e2e;
+}
+
+.control-group:last-child {
+    border-right: none;
+    padding-right: 0;
+}
+
 .controls {
     display: flex;
     gap: 6px;
 }
 
-.controls button {
-    flex: 1;
+.controls button,
+.control-group button {
+    white-space: nowrap;
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 6px;
-    padding: 9px 0;
+    padding: 9px 14px;
     background: #12121a;
     color: #999;
     border: 1px solid #1e1e2e;
@@ -162,17 +181,20 @@ main {
     transition: all 0.15s ease;
 }
 
-.controls button:hover {
+.controls button:hover,
+.control-group button:hover {
     background: #1a1a28;
     border-color: #333;
     color: #ccc;
 }
 
-.controls button:active {
+.controls button:active,
+.control-group button:active {
     transform: scale(0.97);
 }
 
-.controls button.active {
+.controls button.active,
+.control-group button.active {
     background: #2a1515;
     border-color: #ff4444;
     color: #ff4444;
@@ -218,7 +240,9 @@ main {
     display: flex;
     gap: 4px;
     margin-top: 10px;
-    margin-bottom: 8px;
+    margin-bottom: -1px;
+    position: relative;
+    z-index: 1;
 }
 
 .tab {
@@ -226,7 +250,7 @@ main {
     align-items: center;
     gap: 5px;
     padding: 7px 14px;
-    background: #0e0e16;
+    background: #0a0a10;
     color: #666;
     border: 1px solid #1e1e2e;
     border-radius: 6px 6px 0 0;
@@ -237,12 +261,49 @@ main {
     transition: all 0.15s;
 }
 
-.tab:hover { color: #999; }
+.tab:hover, .subtab:hover { color: #999; }
+
+.subtabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: -1px;
+    position: relative;
+    z-index: 1;
+}
+
+.subtab {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 7px 14px;
+    background: #0a0a10;
+    color: #666;
+    border: 1px solid #1e1e2e;
+    border-radius: 6px 6px 0 0;
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.subtab.active {
+    background: #0e0e16;
+    color: #ff4444;
+    border-bottom-color: #0e0e16;
+}
+
+.subtab-body {
+    background: #0e0e16;
+    border: 1px solid #1e1e2e;
+    border-radius: 0 8px 8px 8px;
+    padding: 14px 16px;
+}
 
 .tab.active {
-    background: #12121a;
+    background: #0e0e16;
     color: #ff4444;
-    border-bottom-color: #12121a;
+    border-bottom-color: #0e0e16;
 }
 
 .tab-content {
@@ -250,6 +311,18 @@ main {
 }
 
 .tab-content.active {
+    display: block;
+    background: #0e0e16;
+    border: 1px solid #1e1e2e;
+    border-radius: 0 8px 8px 8px;
+    padding: 14px 16px;
+}
+
+.subtab-content {
+    display: none;
+}
+
+.subtab-content.active {
     display: block;
 }
 
@@ -360,6 +433,12 @@ main {
     border: 1px solid #1e1e2e;
     border-radius: 8px;
     padding: 14px 16px;
+}
+
+.tab-content > .stat-group {
+    border: none;
+    border-radius: 0;
+    padding: 0;
 }
 
 .stat-group h2 {
