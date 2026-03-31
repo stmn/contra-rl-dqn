@@ -108,8 +108,7 @@ class ContraEnv(gym.Env):
         self._prev_score = 0
         self._saved_game_state: np.ndarray | None = None
         self._practice = False
-        self._prev_enemy_hp = [0] * 16  # track $580+slot for turret hit reward
-        self._prev_boss_hp = [0] * 16  # track $578+slot for boss hit reward
+        self._prev_enemy_hp = [0] * 16  # track $578+slot for hit reward
         self._prev_weapon = 0
         self._reward_weapon = 0.0
 
@@ -222,11 +221,10 @@ class ContraEnv(gym.Env):
         self._reward_death = 0.0
         self._death_count = 0
         self._turret_hits = 0
-        self._prev_boss_hp = [self._nes[0x578 + s] for s in range(16)]
         self._prev_weapon = self._nes[RAM_WEAPON] & 0x07
         self._reward_weapon = 0.0
         self._events = []
-        self._prev_enemy_hp = [self._nes[RAM_ENEMY_HP_BASE + s] for s in range(16)]
+        self._prev_enemy_hp = [self._nes[0x578 + s] for s in range(16)]
         frame = self._nes.step(1)
         self._last_frame = frame.copy()
         info = self._get_info()
@@ -314,35 +312,40 @@ class ContraEnv(gym.Env):
         score_delta = score - self._prev_score
         _KILL_NAMES = {1:"Soldier",3:"Rot.Gun",5:"Sniper/Turret",10:"Wall Plating",
                        20:"Heavy",30:"Elite",50:"Tank",100:"Boss",150:"Boss"}
-        if 0 < score_delta < 200:  # raised from 100 to catch boss kills
-            kill_reward = score_delta * 15.0
-            total_reward += kill_reward
-            self._reward_kills += kill_reward
-            name = _KILL_NAMES.get(score_delta, f"Unknown({score_delta})")
-            self._events.append((self._step_count, f"Kill {name} +{kill_reward:.0f}"))
+        if 0 < score_delta < 200:
+            name = _KILL_NAMES.get(score_delta)
+            if name:
+                kill_reward = score_delta * 15.0
+                total_reward += kill_reward
+                self._reward_kills += kill_reward
+                self._events.append((self._step_count, f"Kill {name} +{kill_reward:.0f}"))
+            else:
+                px, py = self._nes[0x334], self._nes[0x31A]
+                self._events.append((self._step_count, f"Unknown kill delta={score_delta} pos=({px},{py})"))
         self._prev_score = score
 
-        # Turret hit reward — $580+slot counts down when turret takes damage
-        for slot in range(16):
-            hp = self._nes[RAM_ENEMY_HP_BASE + slot]
-            prev_hp = self._prev_enemy_hp[slot]
-            if 0 < hp < prev_hp <= 20:  # HP decreased, sane range (turrets have ~7-8 HP)
-                total_reward += 50.0
-                self._reward_turret += 50.0
-                self._turret_hits += 1
-                self._events.append((self._step_count, f"Turret hit +50 (HP {prev_hp}→{hp})"))
-            self._prev_enemy_hp[slot] = hp
-
-        # Boss hit reward — $578+slot for multi-hit enemies/bosses
+        # Enemy HP hit reward — $578+slot (ENEMY_HP from ROM), counts down on damage
+        # Previously used $580 which is just $578 offset by 8 slots ($578+15 == $580+7 == $587)
         for slot in range(16):
             hp = self._nes[0x578 + slot]
-            prev_hp = self._prev_boss_hp[slot]
-            if 0 < hp < prev_hp <= 0x30:  # sane range, skip $F0/$F1 special
+            prev_hp = self._prev_enemy_hp[slot]
+            if 0 < hp < prev_hp <= 0x30:  # skip $F0/$F1 special values
+                etype = self._nes[0x528 + slot]
+                ex = self._nes[0x33E + slot]
+                ey = self._nes[0x324 + slot]
                 total_reward += 50.0
                 self._reward_turret += 50.0
                 self._turret_hits += 1
-                self._events.append((self._step_count, f"Boss hit +50 (HP {prev_hp}→{hp})"))
-            self._prev_boss_hp[slot] = hp
+                _HIT_NAMES = {4:"Rotating Gun",7:"Red Turret",8:"Wall Cannon",0x0E:"Turret Man",
+                              0x10:"Boss Turret",0x11:"Boss Door"}
+                hit_name = _HIT_NAMES.get(etype)
+                if hit_name:
+                    self._events.append((self._step_count,
+                        f"Turret hit {hit_name} +50 HP {prev_hp}→{hp}"))
+                else:
+                    self._events.append((self._step_count,
+                        f"Turret hit type={etype} +50 HP {prev_hp}→{hp} pos=({ex},{ey})"))
+            self._prev_enemy_hp[slot] = hp
 
         # Weapon pickup reward
         _WEAPON_STRENGTH = [0, 2, 1, 3, 2, 0, 0]  # R=0,M=2,F=1,S=3,L=2,B=0,Falcon=0
