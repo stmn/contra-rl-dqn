@@ -257,7 +257,7 @@ class DQNTrainer:
         self.lr = 1e-4
         self.gamma = 0.99
         self.batch_size = 32
-        self.buffer_size = 100_000
+        self.buffer_size = 250_000
         self.learning_starts = 1_000
         self.train_freq = 4
         self.target_update_freq = 1_000
