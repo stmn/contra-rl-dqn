@@ -168,8 +168,7 @@ Discovered through systematic RAM scanning with cynes (full NES RAM map: [Data C
 | `$33E-$347` | Enemy X positions | 16 slots |
 | `$324-$32D` | Enemy Y positions | 16 slots |
 | `$528` | Enemy types | 16 slots |
-| `$578` | Enemy HP (old) | 16 slots, not actual HP — use $580 instead |
-| `$580` | Enemy HP | 16 slots, counts DOWN per hit (e.g. turret: 7→0 = destroyed) |
+| `$580` | Enemy/turret HP | 16 slots, counts DOWN per hit (turret: 7→0 = destroyed) |
 | `$504` | Turret rotation | 8 directions (0/32/64/96/128/160/192/224) |
 | `$508` | Enemy X velocity | For static vs moving detection |
 
