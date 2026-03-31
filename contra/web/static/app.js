@@ -13,6 +13,7 @@ let newFrameReady = false;
 let liveScroll = 0;
 let liveEpisode = 0;
 let swappedView = false;
+let highlightCoord = null; // {x, y} in NES coords (256x240)
 
 canvas.style.cursor = "pointer";
 canvas.addEventListener("click", () => { swappedView = !swappedView; });
@@ -31,6 +32,26 @@ function renderLoop() {
             ctx.fillStyle = "rgba(0,0,0,0.5)";
             ctx.fillRect(ax - 1, ay - 1, aw + 2, ah + 2);
             ctx.drawImage(pipBmp, ax, ay, aw, ah);
+        }
+
+        // Highlight coordinate on hover
+        if (highlightCoord) {
+            const hx = highlightCoord.x, hy = highlightCoord.y;
+            // Crosshair
+            ctx.strokeStyle = "#ff0";
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(hx - 12, hy); ctx.lineTo(hx + 12, hy);
+            ctx.moveTo(hx, hy - 12); ctx.lineTo(hx, hy + 12);
+            ctx.stroke();
+            // Circle
+            ctx.beginPath();
+            ctx.arc(hx, hy, 8, 0, Math.PI * 2);
+            ctx.stroke();
+            // Label
+            ctx.fillStyle = "#ff0";
+            ctx.font = "10px monospace";
+            ctx.fillText(`(${hx},${hy})`, hx + 10, hy - 10);
         }
 
         newFrameReady = false;
@@ -214,16 +235,19 @@ function updateStats(s) {
         }
         const ev = $("#run-log-events");
         if (ev && r.events) {
-            ev.innerHTML = r.events.map(e =>
-                `<div style="padding:2px 0;color:${e[1].startsWith('Death') ? '#ff4444' : e[1].startsWith('Turret') ? '#2196F3' : '#ff9800'}">` +
-                `<span style="color:#555">Step ${e[0]}</span> ${e[1]}</div>`
-            ).reverse().join("");
+            ev.innerHTML = r.events.map(e => {
+                const color = e[1].startsWith('Death') ? '#ff4444' : e[1].startsWith('Turret') ? '#2196F3' : e[1].startsWith('Weapon') ? '#e040fb' : e[1].startsWith('Unknown') ? '#555' : e[1].startsWith('Kill') ? '#ff9800' : '#555';
+                // Replace pos=(X,Y) with hoverable coord spans
+                const raw = `Step ${e[0]} ${e[1]}`;
+                const text = e[1].replace(/pos=\((\d+),(\d+)\)/g, (m, x, y) => coordSpan(x, y, `pos=(${x},${y})`));
+                return `<div style="padding:2px 0;color:${color};display:flex;align-items:center;gap:6px"><span class="copy-btn" onclick="navigator.clipboard.writeText('${raw.replace(/'/g,"\\'")}')" style="cursor:pointer;opacity:0.3;font-size:14px" title="Copy">&#x2398;</span><span style="flex:1"><span style="color:#555">Step ${e[0]}</span> ${text}</span></div>`;
+            }).reverse().join("");
         }
         const av = $("#agent-view-text");
         if (av) {
             const p = r.player || {x:0, y:0, weapon:0};
             const weaponName = WEAPONS[p.weapon] || "Unknown";
-            let html = `<div style="color:#4CAF50;margin-bottom:4px">Player: (${p.x}, ${p.y})</div>`;
+            let html = `<div style="color:#4CAF50;margin-bottom:4px">Player: ${coordSpan(p.x, p.y)}</div>`;
             html += `<div style="color:#4CAF50;margin-bottom:8px">Weapon: ${weaponName}</div>`;
 
             const ENEMY_TYPES = {1:"Bullet",2:"Weapon Box",3:"Flying Bonus",4:"Rotating Gun",5:"Soldier",6:"Sniper",7:"Red Turret",8:"Wall Cannon",11:"Mortar",12:"Scuba Diver",14:"Turret Man",15:"Turret Bullet",16:"Boss Turret",17:"Boss Door",18:"Bridge"};
@@ -234,21 +258,20 @@ function updateStats(s) {
             known.forEach((e, i) => {
                 const name = ENEMY_TYPES[e.type];
                 const hpStr = e.hp > 1 ? ` hp=${e.hp}` : '';
-                html += `<div style="padding:2px 0 2px 12px;color:#ccc">${name} pos=(${e.x},${e.y}) dist=${e.dist}${hpStr}</div>`;
+                html += `<div style="padding:2px 0 2px 12px;color:#ccc">${name} ${coordSpan(e.x, e.y)} dist=${e.dist}${hpStr}</div>`;
             });
             if (unknown.length > 0) {
                 html += `<div style="color:#ff6600;margin:4px 0 4px 0">Unknown types: ${unknown.length}</div>`;
                 unknown.forEach((e) => {
                     const hpStr = e.hp > 1 ? ` hp=${e.hp}` : '';
-                    html += `<div style="padding:2px 0 2px 12px;color:#ff6600">type=${e.type} pos=(${e.x},${e.y}) dist=${e.dist}${hpStr}</div>`;
+                    html += `<div style="padding:2px 0 2px 12px;color:#ff6600">type=${e.type} ${coordSpan(e.x, e.y)} dist=${e.dist}${hpStr}</div>`;
                 });
             }
 
             const bullets = r.bullets || [];
             html += `<div style="color:#ff4444;margin:8px 0 4px">Bullets visible: ${bullets.length}</div>`;
             bullets.forEach((b, i) => {
-                html += `<div style="padding:2px 0 2px 12px;color:#ccc">` +
-                    `#${i+1} pos=(${b.x},${b.y}) dist=${b.dist}</div>`;
+                html += `<div style="padding:2px 0 2px 12px;color:#ccc">#${i+1} ${coordSpan(b.x, b.y)} dist=${b.dist}</div>`;
             });
 
             const OTHER_TYPES = {2:"Weapon Box",3:"Flying Bonus",18:"Bridge"};
@@ -258,7 +281,7 @@ function updateStats(s) {
                 other.forEach((o) => {
                     let name = OTHER_TYPES[o.type] || `type=${o.type}`;
                     if (o.weapon !== undefined) name += ` (${WEAPONS[o.weapon] || '?'})`;
-                    html += `<div style="padding:2px 0 2px 12px;color:#888">${name} pos=(${o.x},${o.y}) dist=${o.dist}</div>`;
+                    html += `<div style="padding:2px 0 2px 12px;color:#888">${name} ${coordSpan(o.x, o.y)} dist=${o.dist}</div>`;
                 });
             }
 
@@ -814,6 +837,20 @@ async function loadConfig() {
         el.innerHTML = '<div class="stat-row"><span class="stat-label">Config unavailable — deploy new code to server</span></div>';
     }
 }
+
+// === Coordinate highlight on hover ===
+function coordSpan(x, y, text) {
+    return `<span class="coord-hover" data-cx="${x}" data-cy="${y}" style="text-decoration:underline dotted;cursor:crosshair">${text || `(${x},${y})`}</span>`;
+}
+
+document.addEventListener("mouseover", (e) => {
+    const t = e.target.closest(".coord-hover");
+    if (t) highlightCoord = { x: parseInt(t.dataset.cx), y: parseInt(t.dataset.cy) };
+});
+document.addEventListener("mouseout", (e) => {
+    const t = e.target.closest(".coord-hover");
+    if (t) highlightCoord = null;
+});
 
 // === Sub-tabs (Run Log) ===
 function switchSubTab(btn) {

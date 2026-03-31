@@ -669,6 +669,8 @@ tr:first-child td {
     padding: 6px 10px;
 }
 
+.copy-btn:hover { opacity: 1 !important; }
+
 /* === Responsive === */
 @media (max-width: 900px) {
     main { flex-direction: column; }
