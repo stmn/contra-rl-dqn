@@ -167,6 +167,7 @@ async def get_history():
     return {
         "reward_history": _tracker.reward_history(5000),
         "survival_history": _tracker.survival_history(5000),
+        "boss_history": _tracker.boss_history(5000),
         "top_runs": _tracker.top_runs(10),
     }
 

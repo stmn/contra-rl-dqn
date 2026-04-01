@@ -221,6 +221,7 @@ class ContraEnv(gym.Env):
         self._reward_death = 0.0
         self._death_count = 0
         self._turret_hits = 0
+        self._reached_boss = False
         self._prev_weapon = self._nes[RAM_WEAPON] & 0x07
         self._reward_weapon = 0.0
         self._events = []
@@ -374,6 +375,14 @@ class ContraEnv(gym.Env):
         else:
             self._idle_counter = 0
 
+        # Boss detection — type 0x11 (Boss Door) or 0x10 (Boss Bomb Turret) visible
+        if not self._reached_boss:
+            for slot in range(16):
+                if self._nes[0x528 + slot] == 0x11:
+                    self._reached_boss = True
+                    self._events.append((self._step_count, "Reached boss!"))
+                    break
+
         # (Death penalty is applied above in frame skip loop)
 
         self._last_frame = frame.copy() if frame is not None else None
@@ -404,6 +413,7 @@ class ContraEnv(gym.Env):
             "death_count": self._death_count,
             "turret_hits": self._turret_hits,
             "practice": self._practice,
+            "reached_boss": self._reached_boss,
             "events": self._events[-20:],  # last 20 events
         }
 

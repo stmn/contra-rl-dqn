@@ -274,7 +274,7 @@ function updateStats(s) {
                 html += `<div style="padding:2px 0 2px 12px;color:#ccc">#${i+1} ${coordSpan(b.x, b.y)} dist=${b.dist}</div>`;
             });
 
-            const OTHER_TYPES = {2:"Weapon Box",3:"Flying Bonus",18:"Bridge"};
+            const OTHER_TYPES = {2:"Bridge Boom",3:"Flying Bonus",18:"Bridge"};
             const other = r.other || [];
             if (other.length > 0) {
                 html += `<div style="color:#888;margin:8px 0 4px">Other visible: ${other.length}</div>`;
@@ -349,6 +349,17 @@ function initChart() {
                     fill: false,
                     tension: 0.4,
                     yAxisID: "y2",
+                    hidden: true,
+                },
+                {
+                    label: "Boss %",
+                    data: [],
+                    borderColor: "#e040fb",
+                    borderWidth: 2,
+                    pointRadius: 0,
+                    fill: false,
+                    tension: 0.4,
+                    yAxisID: "y3",
                 },
             ]
         },
@@ -370,12 +381,20 @@ function initChart() {
                     grid: { color: "#1a1a1a" },
                 },
                 y2: {
-                    display: true,
+                    display: false,
                     position: "right",
                     title: { display: true, text: "Survival (steps)", color: "#4CAF50" },
                     ticks: { color: "#4CAF50" },
                     grid: { drawOnChartArea: false },
                     min: 0,
+                },
+                y3: {
+                    display: true,
+                    position: "right",
+                    title: { display: true, text: "Boss %", color: "#e040fb" },
+                    ticks: { color: "#e040fb", callback: v => v + '%' },
+                    grid: { drawOnChartArea: false },
+                    min: 0, max: 100,
                 }
             },
             plugins: { legend: { display: false } }
@@ -411,6 +430,7 @@ rangeSlider.addEventListener("input", () => {
 
 let allRewards = [];
 let allSurvival = [];
+let allBoss = [];
 
 function computeRollingAvg(arr) {
     const avg = [];
@@ -422,28 +442,50 @@ function computeRollingAvg(arr) {
     return avg;
 }
 
+function computeRollingPct(arr) {
+    const pct = [];
+    for (let i = 0; i < arr.length; i++) {
+        const start = Math.max(0, i - rollingWindow + 1);
+        const window = arr.slice(start, i + 1);
+        const count = window.filter(v => v).length;
+        pct.push(100 * count / window.length);
+    }
+    return pct;
+}
+
+function toggleDataset(checkbox) {
+    const idx = parseInt(checkbox.dataset.dataset);
+    rewardChart.data.datasets[idx].hidden = !checkbox.checked;
+    rewardChart.update();
+}
+
 function updateChart() {
     const ranged = allRewards.slice(-dataRange);
     const rangedSurv = allSurvival.slice(-dataRange);
+    const rangedBoss = allBoss.slice(-dataRange);
     const startEp = Math.max(0, allRewards.length - dataRange);
 
     const avgRewards = computeRollingAvg(ranged);
     const avgSurv = computeRollingAvg(rangedSurv);
+    const bossPct = computeRollingPct(rangedBoss);
 
     const data = rewardChart.data;
     data.labels = ranged.map((_, i) => startEp + i + 1);
     data.datasets[0].data = ranged;
     data.datasets[1].data = avgRewards;
     data.datasets[2].data = avgSurv;
+    data.datasets[3].data = bossPct;
     rewardChart.update();
 
-    // Live avg values in legend
+    // Live values in legend
     const elAvgR = $("#live-avg-reward");
     const elAvgS = $("#live-avg-survival");
+    const elBoss = $("#live-boss-pct");
     if (elAvgR && avgRewards.length > 0) elAvgR.textContent = avgRewards[avgRewards.length - 1].toFixed(0);
     if (elAvgS && avgSurv.length > 0) elAvgS.textContent = avgSurv[avgSurv.length - 1].toFixed(0);
+    if (elBoss && bossPct.length > 0) elBoss.textContent = bossPct[bossPct.length - 1].toFixed(0) + '%';
 
-    updateRewardTable(ranged, rangedSurv, startEp);
+    updateRewardTable(ranged, rangedSurv, rangedBoss, startEp);
 }
 
 function setChartView(view) {
@@ -455,24 +497,23 @@ function setChartView(view) {
     $("#btn-table-view").classList.toggle("active", view === "table");
 }
 
-function updateRewardTable(rewards, survival, startEp) {
+function updateRewardTable(rewards, survival, boss, startEp) {
     const tbody = document.querySelector("#reward-table tbody");
     if (!tbody || rewards.length === 0) return;
 
     const bucketSize = rollingWindow;
-    tbody.innerHTML = "";
-
-    // Build rows newest-first
     const rows = [];
     for (let i = 0; i < rewards.length; i += bucketSize) {
         const chunk = rewards.slice(i, i + bucketSize);
         const survChunk = survival.slice(i, i + bucketSize);
+        const bossChunk = boss.slice(i, i + bucketSize);
         const avg = chunk.reduce((a, b) => a + b, 0) / chunk.length;
         const avgSurv = survChunk.length > 0 ? survChunk.reduce((a, b) => a + b, 0) / survChunk.length : 0;
         const best = Math.max(...chunk);
+        const bossPct = bossChunk.length > 0 ? (100 * bossChunk.filter(v => v).length / bossChunk.length).toFixed(0) : 0;
         const epFrom = startEp + i + 1;
         const epTo = startEp + Math.min(i + bucketSize, rewards.length);
-        rows.push(`<tr><td>${epFrom}–${epTo}</td><td>${avg.toFixed(1)}</td><td>${avgSurv.toFixed(0)}</td><td>${best.toFixed(1)}</td><td>${chunk.length}</td></tr>`);
+        rows.push(`<tr><td>${epFrom}–${epTo}</td><td>${avg.toFixed(1)}</td><td>${avgSurv.toFixed(0)}</td><td>${best.toFixed(1)}</td><td>${bossPct}%</td><td>${chunk.length}</td></tr>`);
     }
     tbody.innerHTML = rows.reverse().join("");
 }
@@ -491,6 +532,7 @@ async function loadHistory() {
         if (data.reward_history && data.reward_history.length > 0) {
             allRewards = data.reward_history;
             allSurvival = data.survival_history || [];
+            allBoss = data.boss_history || [];
             lastSeenEpisode = data.reward_history.length;
             updateChart();
         }
@@ -523,6 +565,7 @@ setInterval(async () => {
         if (data.reward_history && data.reward_history.length > 0) {
             allRewards = data.reward_history;
             allSurvival = data.survival_history || [];
+            allBoss = data.boss_history || [];
             lastSeenEpisode = data.reward_history.length;
             updateChart();
         }

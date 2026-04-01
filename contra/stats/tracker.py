@@ -75,6 +75,7 @@ class StatsTracker:
         # History for charts
         self._reward_history: list[float] = []
         self._survival_history: list[int] = []
+        self._boss_history: list[bool] = []  # True = reached boss
         self._recent_timeouts: list[bool] = []  # last 50 episodes: True = hit limit
         self._episode_length: int = 18_000  # 10 min safety net
         self._rollback_count: int = 0
@@ -115,11 +116,14 @@ class StatsTracker:
             self._recent_timeouts.append(hit_limit)
             if len(self._recent_timeouts) > 50:
                 self._recent_timeouts.pop(0)
+            reached_boss = info.get("reached_boss", False) if info else False
             self._reward_history.append(reward)
             self._survival_history.append(ep_steps)
+            self._boss_history.append(reached_boss)
             if len(self._reward_history) > 10_000:
                 self._reward_history = self._reward_history[-5_000:]
                 self._survival_history = self._survival_history[-5_000:]
+                self._boss_history = self._boss_history[-5_000:]
 
             record = EpisodeRecord(
                 episode=self._episode,
@@ -197,6 +201,10 @@ class StatsTracker:
         with self._lock:
             return self._survival_history[-last_n:]
 
+    def boss_history(self, last_n: int = 1000) -> list[bool]:
+        with self._lock:
+            return self._boss_history[-last_n:]
+
     def top_runs(self, n: int = 10) -> list[dict]:
         with self._lock:
             return [
@@ -216,6 +224,7 @@ class StatsTracker:
                 "generation": self._generation,
                 "reward_history": self._reward_history[-5_000:],
                 "survival_history": self._survival_history[-5_000:],
+                "boss_history": self._boss_history[-5_000:],
                 "episode_length": self._episode_length,
                 "top_runs": [
                     {"episode": r.episode, "reward": r.reward, "level": r.level, "deaths": r.deaths, "timestamp": r.timestamp, "steps": r.steps}
@@ -242,6 +251,7 @@ class StatsTracker:
             self._generation = data.get("generation", 0)
             self._reward_history = data.get("reward_history", [])
             self._survival_history = data.get("survival_history", [])
+            self._boss_history = data.get("boss_history", [])
             self._episode_length = data.get("episode_length", 600)
             self._top_runs = [
                 EpisodeRecord(

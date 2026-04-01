@@ -218,15 +218,16 @@
             <div id="chart-view">
                 <canvas id="reward-chart" style="max-height:400px"></canvas>
                 <div class="chart-legend">
-                    <span class="legend-item" data-tippy-content="Reward for each individual episode. Noisy but shows the full picture."><span class="dot" style="background:rgba(255,68,68,0.3)"></span> Raw reward</span>
-                    <span class="legend-item" data-tippy-content="Rolling average reward — smoothed trend line. Rising = the agent is improving."><span class="dot" style="background:#ffcc00"></span> Avg reward: <strong id="live-avg-reward" style="color:#ffcc00">—</strong></span>
-                    <span class="legend-item" data-tippy-content="Rolling average survival time (in steps). Shows how long the agent stays alive."><span class="dot" style="background:#4CAF50"></span> Avg survival: <strong id="live-avg-survival" style="color:#4CAF50">—</strong></span>
+                    <label class="legend-item"><input type="checkbox" checked data-dataset="0" onchange="toggleDataset(this)"> <span class="dot" style="background:rgba(255,68,68,0.3)"></span> Raw reward</label>
+                    <label class="legend-item"><input type="checkbox" checked data-dataset="1" onchange="toggleDataset(this)"> <span class="dot" style="background:#ffcc00"></span> Avg reward: <strong id="live-avg-reward" style="color:#ffcc00">—</strong></label>
+                    <label class="legend-item"><input type="checkbox" data-dataset="2" onchange="toggleDataset(this)"> <span class="dot" style="background:#4CAF50"></span> Avg survival: <strong id="live-avg-survival" style="color:#4CAF50">—</strong></label>
+                    <label class="legend-item"><input type="checkbox" checked data-dataset="3" onchange="toggleDataset(this)"> <span class="dot" style="background:#e040fb"></span> Boss %: <strong id="live-boss-pct" style="color:#e040fb">—</strong></label>
                 </div>
             </div>
             <div id="table-view" style="display:none;">
                 <table class="stats-table" id="reward-table">
                     <thead>
-                        <tr><th>Period</th><th>Avg Reward</th><th>Avg Survival</th><th>Best</th><th>Episodes</th></tr>
+                        <tr><th>Period</th><th>Avg Reward</th><th>Avg Survival</th><th>Best</th><th>Boss %</th><th>Episodes</th></tr>
                     </thead>
                     <tbody></tbody>
                 </table>
