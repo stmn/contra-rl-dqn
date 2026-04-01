@@ -528,7 +528,8 @@ class DQNTrainer:
             # FPS tracking + buffer info
             if global_step % 1000 == 0:
                 elapsed = time.time() - start_time
-                fps = global_step / elapsed if elapsed > 0 else 0
+                steps_this_session = global_step - start_step
+                fps = steps_this_session / elapsed if elapsed > 0 else 0
                 if self.on_step:
                     self.on_step(global_step, fps)
                 if self.frame_buffer:
