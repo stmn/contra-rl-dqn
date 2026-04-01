@@ -376,27 +376,19 @@ class ContraEnv(gym.Env):
         else:
             self._idle_counter = 0
 
-        # Boss detection per level (type IDs from ROM disassembly)
-        # Level-specific types 0x10+ change meaning per level, detected via RAM_LEVEL
-        _BOSS_TYPES_BY_LEVEL = {
-            0: {0x11},         # L1 Jungle: Boss Door Plate
-            1: {0x10, 0x1C},   # L2 Base 1: Boss Eye, Boss Gemini
-            2: {0x14},         # L3 Waterfall: Boss Mouth (Dragon)
-            3: {0x10, 0x1C},   # L4 Base 2: Boss Eye, Boss Gemini
-            4: {0x14},         # L5 Snow: Alien Carrier (Guldaf)
-            5: {0x13},         # L6 Energy: Giant Robot
-            6: {0x16},         # L7 Hangar: Armored Door
-            7: {0x16},         # L8 Alien: Heart (Final Boss)
-        }
+        # Boss detection by scroll threshold (boss is at fixed map position)
+        _BOSS_SCROLL_THRESHOLD = 90_000
         level = self._nes[RAM_LEVEL]
-        boss_types = _BOSS_TYPES_BY_LEVEL.get(level, set())
-        if not self._reached_boss:
+        if not self._reached_boss and self._cumulative_scroll >= _BOSS_SCROLL_THRESHOLD:
+            self._reached_boss = True
+            self._reached_boss_level = level
+            # Log all active enemy types for debugging
+            types = []
             for slot in range(16):
-                if self._nes[0x528 + slot] in boss_types:
-                    self._reached_boss = True
-                    self._reached_boss_level = level
-                    self._events.append((self._step_count, f"Reached L{level+1} boss!"))
-                    break
+                t = self._nes[0x528 + slot]
+                if t > 0:
+                    types.append(f"{t}")
+            self._events.append((self._step_count, f"Reached L{level+1} boss! types=[{','.join(types)}]"))
 
         # (Death penalty is applied above in frame skip loop)
 
