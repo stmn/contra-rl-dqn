@@ -366,7 +366,16 @@ async def ws_stats(ws: WebSocket):
                     d["auto_restart"] = _controls.auto_restart
                     d["waiting_restart"] = _controls.waiting_restart
                 import resource
-                d["ram_mb"] = round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024 / 1024, 1)
+                d["ram_peak_mb"] = round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024 / 1024, 1)
+                if not hasattr(ws_stats, '_ram_cache') or time.time() - ws_stats._ram_time > 10:
+                    try:
+                        import subprocess, os
+                        rss_kb = int(subprocess.check_output(['ps', '-o', 'rss=', '-p', str(os.getpid())]).strip())
+                        ws_stats._ram_cache = round(rss_kb / 1024, 1)
+                    except Exception:
+                        ws_stats._ram_cache = d["ram_peak_mb"]
+                    ws_stats._ram_time = time.time()
+                d["ram_current_mb"] = ws_stats._ram_cache
                 if _frame_buffer:
                     d["env0_episode"] = _frame_buffer.env0_episode
                     d["features"] = _frame_buffer.env0_features
