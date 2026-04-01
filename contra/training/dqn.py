@@ -472,6 +472,8 @@ class DQNTrainer:
                             "step": ep_steps,
                             "deaths": 1 if terminated else 0,
                             "scroll": self.frame_buffer.env0_scroll if self.frame_buffer else 0,
+                            "reached_boss": self.env.unwrapped._reached_boss,
+                            "reached_boss_level": self.env.unwrapped._reached_boss_level,
                         }
                         self.on_episode(ep_reward, ep_info)
 

@@ -240,7 +240,7 @@ function updateStats(s) {
                 // Replace pos=(X,Y) with hoverable coord spans
                 const raw = `Step ${e[0]} ${e[1]}`;
                 const text = e[1].replace(/pos=\((\d+),(\d+)\)/g, (m, x, y) => coordSpan(x, y, `pos=(${x},${y})`));
-                return `<div style="padding:2px 0;color:${color};display:flex;align-items:center;gap:6px"><span class="copy-btn" onclick="navigator.clipboard.writeText('${raw.replace(/'/g,"\\'")}')" style="cursor:pointer;opacity:0.3;font-size:14px" title="Copy">&#x2398;</span><span style="flex:1"><span style="color:#555">Step ${e[0]}</span> ${text}</span></div>`;
+                return `<div style="padding:2px 0;color:${color};display:flex;align-items:center;gap:6px"><span class="copy-btn" onclick="copyEvent(this)" data-text="${raw.replace(/"/g,'&quot;')}" style="cursor:pointer;opacity:0.3;font-size:14px" title="Copy">&#x2398;</span><span style="flex:1"><span style="color:#555">Step ${e[0]}</span> ${text}</span></div>`;
             }).reverse().join("");
         }
         const av = $("#agent-view-text");
@@ -933,6 +933,20 @@ document.addEventListener("mouseout", (e) => {
     const t = e.target.closest(".coord-hover");
     if (t) highlightCoord = null;
 });
+
+function copyEvent(el) {
+    const text = el.dataset.text;
+    if (navigator.clipboard) {
+        navigator.clipboard.writeText(text);
+    } else {
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
+    }
+}
 
 // === Sub-tabs (Run Log) ===
 function switchSubTab(btn) {
