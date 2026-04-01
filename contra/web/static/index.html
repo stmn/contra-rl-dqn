@@ -221,13 +221,13 @@
                     <label class="legend-item"><input type="checkbox" checked data-dataset="0" onchange="toggleDataset(this)"> <span class="dot" style="background:rgba(255,68,68,0.3)"></span> Raw reward</label>
                     <label class="legend-item"><input type="checkbox" checked data-dataset="1" onchange="toggleDataset(this)"> <span class="dot" style="background:#ffcc00"></span> Avg reward: <strong id="live-avg-reward" style="color:#ffcc00">—</strong></label>
                     <label class="legend-item"><input type="checkbox" data-dataset="2" onchange="toggleDataset(this)"> <span class="dot" style="background:#4CAF50"></span> Avg survival: <strong id="live-avg-survival" style="color:#4CAF50">—</strong></label>
-                    <label class="legend-item"><input type="checkbox" checked data-dataset="3" onchange="toggleDataset(this)"> <span class="dot" style="background:#e040fb"></span> Boss %: <strong id="live-boss-pct" style="color:#e040fb">—</strong></label>
+                    <span id="boss-checkboxes"></span>
                 </div>
             </div>
             <div id="table-view" style="display:none;">
                 <table class="stats-table" id="reward-table">
                     <thead>
-                        <tr><th>Period</th><th>Avg Reward</th><th>Avg Survival</th><th>Best</th><th>Boss %</th><th>Episodes</th></tr>
+                        <tr><th>Period</th><th>Avg Reward</th><th>Avg Survival</th><th>Best</th><th id="boss-table-headers"></th><th>Episodes</th></tr>
                     </thead>
                     <tbody></tbody>
                 </table>

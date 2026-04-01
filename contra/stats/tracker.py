@@ -75,7 +75,7 @@ class StatsTracker:
         # History for charts
         self._reward_history: list[float] = []
         self._survival_history: list[int] = []
-        self._boss_history: list[bool] = []  # True = reached boss
+        self._boss_history: list[int] = []  # -1 = no boss, 0-7 = reached boss on level N
         self._recent_timeouts: list[bool] = []  # last 50 episodes: True = hit limit
         self._episode_length: int = 18_000  # 10 min safety net
         self._rollback_count: int = 0
@@ -116,7 +116,7 @@ class StatsTracker:
             self._recent_timeouts.append(hit_limit)
             if len(self._recent_timeouts) > 50:
                 self._recent_timeouts.pop(0)
-            reached_boss = info.get("reached_boss", False) if info else False
+            reached_boss = info.get("reached_boss_level", -1) if info else -1
             self._reward_history.append(reward)
             self._survival_history.append(ep_steps)
             self._boss_history.append(reached_boss)

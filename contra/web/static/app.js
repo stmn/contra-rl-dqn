@@ -351,16 +351,6 @@ function initChart() {
                     yAxisID: "y2",
                     hidden: true,
                 },
-                {
-                    label: "Boss %",
-                    data: [],
-                    borderColor: "#e040fb",
-                    borderWidth: 2,
-                    pointRadius: 0,
-                    fill: false,
-                    tension: 0.4,
-                    yAxisID: "y3",
-                },
             ]
         },
         options: {
@@ -459,6 +449,9 @@ function toggleDataset(checkbox) {
     rewardChart.update();
 }
 
+const BOSS_COLORS = ['#e040fb','#00bcd4','#ff9800','#4CAF50','#ff5722','#9c27b0','#2196F3','#cddc39'];
+let knownBossLevels = [];
+
 function updateChart() {
     const ranged = allRewards.slice(-dataRange);
     const rangedSurv = allSurvival.slice(-dataRange);
@@ -467,25 +460,67 @@ function updateChart() {
 
     const avgRewards = computeRollingAvg(ranged);
     const avgSurv = computeRollingAvg(rangedSurv);
-    const bossPct = computeRollingPct(rangedBoss);
+
+    // Find which boss levels have been reached
+    const seenLevels = [...new Set(allBoss.filter(v => v >= 0))].sort();
+
+    // Add/update boss datasets dynamically (start at index 3)
+    if (seenLevels.join() !== knownBossLevels.join()) {
+        knownBossLevels = seenLevels;
+        // Remove old boss datasets
+        rewardChart.data.datasets.splice(3);
+        // Add new ones
+        seenLevels.forEach((lvl, i) => {
+            rewardChart.data.datasets.push({
+                label: `L${lvl+1} Boss %`,
+                data: [],
+                borderColor: BOSS_COLORS[lvl % BOSS_COLORS.length],
+                borderWidth: 2,
+                pointRadius: 0,
+                fill: false,
+                tension: 0.4,
+                yAxisID: "y3",
+            });
+        });
+        // Update checkboxes
+        const container = $("#boss-checkboxes");
+        if (container) {
+            container.innerHTML = seenLevels.map((lvl, i) => {
+                const idx = 3 + i;
+                const color = BOSS_COLORS[lvl % BOSS_COLORS.length];
+                return `<label class="legend-item"><input type="checkbox" checked data-dataset="${idx}" onchange="toggleDataset(this)"> <span class="dot" style="background:${color}"></span> L${lvl+1} Boss %: <strong id="live-boss-pct-${lvl}" style="color:${color}">—</strong></label>`;
+            }).join("");
+        }
+        // Update table headers
+        const thContainer = $("#boss-table-headers");
+        if (thContainer) {
+            thContainer.outerHTML = seenLevels.map(lvl => `<th>L${lvl+1} Boss %</th>`).join("");
+        }
+    }
 
     const data = rewardChart.data;
     data.labels = ranged.map((_, i) => startEp + i + 1);
     data.datasets[0].data = ranged;
     data.datasets[1].data = avgRewards;
     data.datasets[2].data = avgSurv;
-    data.datasets[3].data = bossPct;
+
+    // Boss % per level
+    seenLevels.forEach((lvl, i) => {
+        const bossForLevel = rangedBoss.map(v => v === lvl);
+        const pct = computeRollingPct(bossForLevel);
+        data.datasets[3 + i].data = pct;
+        const el = $(`#live-boss-pct-${lvl}`);
+        if (el && pct.length > 0) el.textContent = pct[pct.length - 1].toFixed(0) + '%';
+    });
+
     rewardChart.update();
 
-    // Live values in legend
     const elAvgR = $("#live-avg-reward");
     const elAvgS = $("#live-avg-survival");
-    const elBoss = $("#live-boss-pct");
     if (elAvgR && avgRewards.length > 0) elAvgR.textContent = avgRewards[avgRewards.length - 1].toFixed(0);
     if (elAvgS && avgSurv.length > 0) elAvgS.textContent = avgSurv[avgSurv.length - 1].toFixed(0);
-    if (elBoss && bossPct.length > 0) elBoss.textContent = bossPct[bossPct.length - 1].toFixed(0) + '%';
 
-    updateRewardTable(ranged, rangedSurv, rangedBoss, startEp);
+    updateRewardTable(ranged, rangedSurv, rangedBoss, startEp, seenLevels);
 }
 
 function setChartView(view) {
@@ -497,12 +532,13 @@ function setChartView(view) {
     $("#btn-table-view").classList.toggle("active", view === "table");
 }
 
-function updateRewardTable(rewards, survival, boss, startEp) {
+function updateRewardTable(rewards, survival, boss, startEp, seenLevels) {
     const tbody = document.querySelector("#reward-table tbody");
     if (!tbody || rewards.length === 0) return;
 
     const bucketSize = rollingWindow;
     const rows = [];
+    const levels = seenLevels || [];
     for (let i = 0; i < rewards.length; i += bucketSize) {
         const chunk = rewards.slice(i, i + bucketSize);
         const survChunk = survival.slice(i, i + bucketSize);
@@ -510,10 +546,13 @@ function updateRewardTable(rewards, survival, boss, startEp) {
         const avg = chunk.reduce((a, b) => a + b, 0) / chunk.length;
         const avgSurv = survChunk.length > 0 ? survChunk.reduce((a, b) => a + b, 0) / survChunk.length : 0;
         const best = Math.max(...chunk);
-        const bossPct = bossChunk.length > 0 ? (100 * bossChunk.filter(v => v).length / bossChunk.length).toFixed(0) : 0;
+        const bossCols = levels.map(lvl => {
+            const pct = bossChunk.length > 0 ? (100 * bossChunk.filter(v => v === lvl).length / bossChunk.length).toFixed(0) : 0;
+            return `<td>${pct}%</td>`;
+        }).join("");
         const epFrom = startEp + i + 1;
         const epTo = startEp + Math.min(i + bucketSize, rewards.length);
-        rows.push(`<tr><td>${epFrom}–${epTo}</td><td>${avg.toFixed(1)}</td><td>${avgSurv.toFixed(0)}</td><td>${best.toFixed(1)}</td><td>${bossPct}%</td><td>${chunk.length}</td></tr>`);
+        rows.push(`<tr><td>${epFrom}–${epTo}</td><td>${avg.toFixed(1)}</td><td>${avgSurv.toFixed(0)}</td><td>${best.toFixed(1)}</td>${bossCols}<td>${chunk.length}</td></tr>`);
     }
     tbody.innerHTML = rows.reverse().join("");
 }

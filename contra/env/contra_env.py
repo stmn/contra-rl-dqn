@@ -222,6 +222,7 @@ class ContraEnv(gym.Env):
         self._death_count = 0
         self._turret_hits = 0
         self._reached_boss = False
+        self._reached_boss_level = -1
         self._prev_weapon = self._nes[RAM_WEAPON] & 0x07
         self._reward_weapon = 0.0
         self._events = []
@@ -375,12 +376,26 @@ class ContraEnv(gym.Env):
         else:
             self._idle_counter = 0
 
-        # Boss detection — type 0x11 (Boss Door) or 0x10 (Boss Bomb Turret) visible
+        # Boss detection per level (type IDs from ROM disassembly)
+        # Level-specific types 0x10+ change meaning per level, detected via RAM_LEVEL
+        _BOSS_TYPES_BY_LEVEL = {
+            0: {0x11},         # L1 Jungle: Boss Door Plate
+            1: {0x10, 0x1C},   # L2 Base 1: Boss Eye, Boss Gemini
+            2: {0x14},         # L3 Waterfall: Boss Mouth (Dragon)
+            3: {0x10, 0x1C},   # L4 Base 2: Boss Eye, Boss Gemini
+            4: {0x14},         # L5 Snow: Alien Carrier (Guldaf)
+            5: {0x13},         # L6 Energy: Giant Robot
+            6: {0x16},         # L7 Hangar: Armored Door
+            7: {0x16},         # L8 Alien: Heart (Final Boss)
+        }
+        level = self._nes[RAM_LEVEL]
+        boss_types = _BOSS_TYPES_BY_LEVEL.get(level, set())
         if not self._reached_boss:
             for slot in range(16):
-                if self._nes[0x528 + slot] == 0x11:
+                if self._nes[0x528 + slot] in boss_types:
                     self._reached_boss = True
-                    self._events.append((self._step_count, "Reached boss!"))
+                    self._reached_boss_level = level
+                    self._events.append((self._step_count, f"Reached L{level+1} boss!"))
                     break
 
         # (Death penalty is applied above in frame skip loop)
@@ -414,6 +429,7 @@ class ContraEnv(gym.Env):
             "turret_hits": self._turret_hits,
             "practice": self._practice,
             "reached_boss": self._reached_boss,
+            "reached_boss_level": self._reached_boss_level,
             "events": self._events[-20:],  # last 20 events
         }
 
