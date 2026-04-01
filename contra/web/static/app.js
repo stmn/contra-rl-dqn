@@ -470,7 +470,7 @@ function updateChart() {
     const avgSurv = computeRollingAvg(rangedSurv);
 
     // Find which boss levels have been reached
-    const seenLevels = [...new Set(allBoss.filter(v => v >= 0))].sort();
+    const seenLevels = [...new Set(allBoss.filter(v => typeof v === 'number' && v >= 0))].sort();
 
     // Add/update boss datasets dynamically (start at index 3)
     if (seenLevels.join() !== knownBossLevels.join()) {
@@ -514,7 +514,7 @@ function updateChart() {
 
     // Boss reach % per level
     seenLevels.forEach((lvl, i) => {
-        const bossForLevel = rangedBoss.map(v => v === lvl);
+        const bossForLevel = rangedBoss.map(v => v === lvl);  // strict ===, false !== 0
         const pct = computeRollingPct(bossForLevel);
         data.datasets[3 + i].data = pct;
         const el = $(`#live-boss-pct-${lvl}`);

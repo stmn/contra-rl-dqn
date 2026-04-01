@@ -364,18 +364,6 @@ class ContraEnv(gym.Env):
                     f"Weapon {names[self._prev_weapon]}→{names[cur_weapon]} +{weapon_reward:.0f}"))
             self._prev_weapon = cur_weapon
 
-        # Idle penalty: standing still = negative reward (skip during death/respawn)
-        if scroll_delta == 0 and self._nes[RAM_PLAYER_STATE] == 1:
-            self._idle_counter += 1
-            if self._idle_counter > 10:  # grace period ~0.7s
-                total_reward -= 0.5
-                self._reward_idle -= 0.5
-            # Penalize LEFT at left screen edge (player X < 20px)
-            if action in _LEFT_ACTIONS and self._nes[0x334] < 30:
-                total_reward -= 0.3
-        else:
-            self._idle_counter = 0
-
         # Boss detection: $84 = BOSS_AUTO_SCROLL_COMPLETE from ROM (works for all levels)
         level = self._nes[RAM_LEVEL]
         if not self._reached_boss and self._nes[0x84] == 1:
