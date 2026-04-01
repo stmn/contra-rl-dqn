@@ -151,6 +151,12 @@ function updateStats(s) {
     $("#header-time").textContent = formatTime(s.training_time);
     $("#training-time").textContent = formatTime(s.training_time);
     $("#timesteps").textContent = `${formatNumber(s.timesteps)} / ${formatNumber(s.total_timesteps)}`;
+    if (s.buffer_size !== undefined) {
+        $("#header-buffer").textContent = `${formatNumber(s.buffer_size)} / ${formatNumber(s.buffer_capacity)}`;
+    }
+    if (s.ram_mb !== undefined) {
+        $("#header-ram").textContent = s.ram_mb >= 1024 ? (s.ram_mb / 1024).toFixed(1) + ' GB' : s.ram_mb.toFixed(0) + ' MB';
+    }
     $("#fps").textContent = s.fps.toFixed(0);
     if (s.timeout_pct !== undefined) $("#timeout-pct").textContent = s.timeout_pct + "%";
     if (s.rollback_count !== undefined) {

@@ -525,12 +525,15 @@ class DQNTrainer:
                 ep_reward = 0.0
                 ep_steps = 0
 
-            # FPS tracking
+            # FPS tracking + buffer info
             if global_step % 1000 == 0:
                 elapsed = time.time() - start_time
                 fps = global_step / elapsed if elapsed > 0 else 0
                 if self.on_step:
                     self.on_step(global_step, fps)
+                if self.frame_buffer:
+                    self.frame_buffer.buffer_size = len(self.replay_buffer)
+                    self.frame_buffer.buffer_capacity = self.buffer_size
                 mode = []
                 if self._hybrid:
                     mode.append("hybrid")

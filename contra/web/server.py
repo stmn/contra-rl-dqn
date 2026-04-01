@@ -365,11 +365,15 @@ async def ws_stats(ws: WebSocket):
                     d["practice"] = _controls.practice_mode
                     d["auto_restart"] = _controls.auto_restart
                     d["waiting_restart"] = _controls.waiting_restart
+                import resource
+                d["ram_mb"] = round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024 / 1024, 1)
                 if _frame_buffer:
                     d["env0_episode"] = _frame_buffer.env0_episode
                     d["features"] = _frame_buffer.env0_features
                     d["action_counts"] = _frame_buffer.action_counts
                     d["run_log"] = _frame_buffer.env0_run_log
+                    d["buffer_size"] = _frame_buffer.buffer_size if hasattr(_frame_buffer, 'buffer_size') else 0
+                    d["buffer_capacity"] = _frame_buffer.buffer_capacity if hasattr(_frame_buffer, 'buffer_capacity') else 0
                 msg["stats"] = d
             await ws.send_json(msg)
             await asyncio.sleep(0.5)

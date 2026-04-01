@@ -34,6 +34,8 @@ class SharedFrameBuffer:
         self.env0_features: list[float] = []
         self.env0_run_log: dict = {}
         self.agent_view: np.ndarray | None = None
+        self.buffer_size: int = 0
+        self.buffer_capacity: int = 0
         self.action_counts: list[int] = [0] * 16
         self.tracker = None
         self._env_frame_buffers: list[list] = [[] for _ in range(num_envs)]  # raw frames for replay
