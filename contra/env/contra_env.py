@@ -376,10 +376,9 @@ class ContraEnv(gym.Env):
         else:
             self._idle_counter = 0
 
-        # Boss detection by scroll threshold (boss is at fixed map position)
-        _BOSS_SCROLL_THRESHOLD = 90_000
+        # Boss detection: $84 = BOSS_AUTO_SCROLL_COMPLETE from ROM (works for all levels)
         level = self._nes[RAM_LEVEL]
-        if not self._reached_boss and self._cumulative_scroll >= _BOSS_SCROLL_THRESHOLD:
+        if not self._reached_boss and self._nes[0x84] == 1:
             self._reached_boss = True
             self._reached_boss_level = level
             self._events.append((self._step_count, f"Reached L{level+1} boss!"))
