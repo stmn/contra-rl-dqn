@@ -236,7 +236,6 @@ function updateStats(s) {
                 <div class="stat-row"><span class="stat-label" style="color:#2196F3">Turret/Boss hits</span><span class="stat-value" style="color:#2196F3">+${(r.reward_turret || 0).toFixed(0)} (${r.turret_hits || 0} hits)</span></div>
                 <div class="stat-row"><span class="stat-label" style="color:#e040fb">Weapon upgrade</span><span class="stat-value" style="color:#e040fb">+${(r.reward_weapon || 0).toFixed(0)}</span></div>
                 <div class="stat-row"><span class="stat-label" style="color:#ff4444">Death penalty</span><span class="stat-value" style="color:#ff4444">${(r.reward_death || 0).toFixed(0)}</span></div>
-                <div class="stat-row"><span class="stat-label" style="color:#888">Idle penalty</span><span class="stat-value" style="color:#888">${(r.reward_idle || 0).toFixed(0)}</span></div>
             `;
         }
         const ev = $("#run-log-events");
@@ -305,11 +304,31 @@ function updateStats(s) {
         if (grid && section) {
             section.style.display = "";
             grid.innerHTML = "";
+            const px = s.run_log ? (s.run_log.player || {}).x || 0 : 0;
+            const py = s.run_log ? (s.run_log.player || {}).y || 0 : 0;
             s.features.forEach((val, i) => {
                 const name = FEATURE_NAMES[i] || "f" + i;
                 const div = document.createElement("div");
                 div.className = "feature-item";
-                div.innerHTML = `<span class="feature-label">${name}</span><span class="feature-value">${val.toFixed(3)}</span>`;
+                let coord = '';
+                // Player position
+                if (i === 0) coord = coordSpan(Math.round(val * 256), py, '⊕');
+                if (i === 1) coord = coordSpan(px, Math.round(val * 240), '⊕');
+                // Enemy dx/dy → absolute screen position
+                if ([4,8,12].includes(i)) {
+                    const ex = Math.round((val * 256) - 128 + px);
+                    const ey_val = s.features[i + 1];
+                    const ey = Math.round((ey_val * 240) - 120 + py);
+                    if (val > 0.01 || val < -0.01) coord = coordSpan(ex, ey, '⊕');
+                }
+                // Bullet dx/dy
+                if ([16,18,20].includes(i)) {
+                    const bx = Math.round((val * 256) - 128 + px);
+                    const by_val = s.features[i + 1];
+                    const by = Math.round((by_val * 240) - 120 + py);
+                    if (val > 0.01 || val < -0.01) coord = coordSpan(bx, by, '⊕');
+                }
+                div.innerHTML = `<span class="feature-label">${name} ${coord}</span><span class="feature-value">${val.toFixed(3)}</span>`;
                 grid.appendChild(div);
             });
         }
