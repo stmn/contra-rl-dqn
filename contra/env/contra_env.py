@@ -382,13 +382,7 @@ class ContraEnv(gym.Env):
         if not self._reached_boss and self._cumulative_scroll >= _BOSS_SCROLL_THRESHOLD:
             self._reached_boss = True
             self._reached_boss_level = level
-            # Log all active enemy types for debugging
-            types = []
-            for slot in range(16):
-                t = self._nes[0x528 + slot]
-                if t > 0:
-                    types.append(f"{t}")
-            self._events.append((self._step_count, f"Reached L{level+1} boss! types=[{','.join(types)}]"))
+            self._events.append((self._step_count, f"Reached L{level+1} boss!"))
 
         # (Death penalty is applied above in frame skip loop)
 
