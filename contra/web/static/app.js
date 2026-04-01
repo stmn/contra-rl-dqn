@@ -381,7 +381,7 @@ function initChart() {
                 y3: {
                     display: true,
                     position: "right",
-                    title: { display: true, text: "Boss %", color: "#e040fb" },
+                    title: { display: true, text: "Boss reach %", color: "#e040fb" },
                     ticks: { color: "#e040fb", callback: v => v + '%' },
                     grid: { drawOnChartArea: false },
                     min: 0, max: 100,
@@ -446,6 +446,14 @@ function computeRollingPct(arr) {
 function toggleDataset(checkbox) {
     const idx = parseInt(checkbox.dataset.dataset);
     rewardChart.data.datasets[idx].hidden = !checkbox.checked;
+    // Show/hide axes based on visible datasets
+    const ds = rewardChart.data.datasets;
+    const yVisible = !ds[0].hidden || !ds[1].hidden;  // raw or avg reward
+    const y2Visible = !ds[2].hidden;  // survival
+    const y3Visible = ds.slice(3).some(d => !d.hidden);  // any boss %
+    rewardChart.options.scales.y.display = yVisible;
+    rewardChart.options.scales.y2.display = y2Visible;
+    rewardChart.options.scales.y3.display = y3Visible;
     rewardChart.update();
 }
 
@@ -472,7 +480,7 @@ function updateChart() {
         // Add new ones
         seenLevels.forEach((lvl, i) => {
             rewardChart.data.datasets.push({
-                label: `L${lvl+1} Boss %`,
+                label: `L${lvl+1} Boss reach %`,
                 data: [],
                 borderColor: BOSS_COLORS[lvl % BOSS_COLORS.length],
                 borderWidth: 2,
@@ -488,13 +496,13 @@ function updateChart() {
             container.innerHTML = seenLevels.map((lvl, i) => {
                 const idx = 3 + i;
                 const color = BOSS_COLORS[lvl % BOSS_COLORS.length];
-                return `<label class="legend-item"><input type="checkbox" checked data-dataset="${idx}" onchange="toggleDataset(this)"> <span class="dot" style="background:${color}"></span> L${lvl+1} Boss %: <strong id="live-boss-pct-${lvl}" style="color:${color}">—</strong></label>`;
+                return `<label class="legend-item"><input type="checkbox" checked data-dataset="${idx}" onchange="toggleDataset(this)"> <span class="dot" style="background:${color}"></span> L${lvl+1} Boss reach %: <strong id="live-boss-pct-${lvl}" style="color:${color}">—</strong></label>`;
             }).join("");
         }
         // Update table headers
         const thContainer = $("#boss-table-headers");
         if (thContainer) {
-            thContainer.outerHTML = seenLevels.map(lvl => `<th>L${lvl+1} Boss %</th>`).join("");
+            thContainer.outerHTML = seenLevels.map(lvl => `<th>L${lvl+1} Boss reach %</th>`).join("");
         }
     }
 
@@ -504,7 +512,7 @@ function updateChart() {
     data.datasets[1].data = avgRewards;
     data.datasets[2].data = avgSurv;
 
-    // Boss % per level
+    // Boss reach % per level
     seenLevels.forEach((lvl, i) => {
         const bossForLevel = rangedBoss.map(v => v === lvl);
         const pct = computeRollingPct(bossForLevel);
