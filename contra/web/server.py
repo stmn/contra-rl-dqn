@@ -329,10 +329,14 @@ async def ws_frames(ws: WebSocket):
                             main_bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
                         _, main_buf = cv2.imencode(".jpg", main_bgr, [cv2.IMWRITE_JPEG_QUALITY, 75])
 
-                        # Agent view: overlay frame resized to 128x128 grayscale
-                        gray = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
-                        small = cv2.resize(gray, (128, 128), interpolation=cv2.INTER_AREA)
-                        _, agent_buf = cv2.imencode(".jpg", small, [cv2.IMWRITE_JPEG_QUALITY, 60])
+                        # Agent view: actual frame stack output (what the agent sees)
+                        agent_frame = _frame_buffer.agent_view
+                        if agent_frame is not None:
+                            _, agent_buf = cv2.imencode(".jpg", agent_frame, [cv2.IMWRITE_JPEG_QUALITY, 60])
+                        else:
+                            gray = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
+                            small = cv2.resize(gray, (128, 128), interpolation=cv2.INTER_AREA)
+                            _, agent_buf = cv2.imencode(".jpg", small, [cv2.IMWRITE_JPEG_QUALITY, 60])
 
                         # Header: scroll(u16) + episode(u16) + main_size(u32) + agent_size(u32)
                         header = struct.pack("<HHII",

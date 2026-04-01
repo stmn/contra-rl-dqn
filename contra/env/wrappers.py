@@ -68,7 +68,7 @@ class StreamCapture(gym.Wrapper):
                     visible_bullets.append({"x": ex, "y": ey, "dist": dist})
                 elif etype in _OTHER_TYPES:
                     entry = {"x": ex, "y": ey, "dist": dist, "type": int(etype)}
-                    if etype in (0x00, 0x02, 0x03):  # weapon items/boxes
+                    if etype in (0x00, 0x03):  # weapon items/capsules
                         entry["weapon"] = int(nes[0x5A8 + slot]) & 0x07
                     visible_other.append(entry)
                 else:
@@ -157,9 +157,10 @@ class Resize(gym.ObservationWrapper):
 class FrameStack(gym.Wrapper):
     """Stack N consecutive frames as channels. Handles dict obs (features pass through)."""
 
-    def __init__(self, env: gym.Env, n_stack: int = 4) -> None:
+    def __init__(self, env: gym.Env, n_stack: int = 4, frame_buffer=None) -> None:
         super().__init__(env)
         self._n_stack = n_stack
+        self._frame_buffer = frame_buffer
         self._hybrid = isinstance(env.observation_space, spaces.Dict)
 
         if self._hybrid:
@@ -194,6 +195,9 @@ class FrameStack(gym.Wrapper):
         obs, reward, terminated, truncated, info = self.env.step(action)
         image = _get_image(obs)
         stacked = self._stack(image)
+        # Update frame buffer with agent's actual view (last frame from stack)
+        if self._frame_buffer:
+            self._frame_buffer.agent_view = self._frames[:, :, -1].copy()
         if self._hybrid:
             return {"image": stacked, "features": obs["features"]}, reward, terminated, truncated, info
         return stacked, reward, terminated, truncated, info
@@ -209,5 +213,5 @@ def wrap_contra(
         env = StreamCapture(env, frame_buffer=frame_buffer, env_id=env_id)
     env = Grayscale(env)
     env = Resize(env, shape=(128, 128))
-    env = FrameStack(env, n_stack=4)
+    env = FrameStack(env, n_stack=4, frame_buffer=frame_buffer)
     return env
