@@ -414,9 +414,52 @@ function initChart() {
                     min: 0, max: 100,
                 }
             },
-            plugins: { legend: { display: false } }
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    mode: 'index',
+                    intersect: false,
+                    callbacks: {
+                        label: function(ctx) {
+                            if (ctx.dataset.hidden) return null;
+                            const v = ctx.parsed.y;
+                            if (ctx.dataset.yAxisID === 'y3') return `${ctx.dataset.label}: ${v.toFixed(0)}%`;
+                            if (ctx.dataset.yAxisID === 'y2') return `${ctx.dataset.label}: ${v.toFixed(0)} steps`;
+                            return `${ctx.dataset.label}: ${v.toFixed(0)}`;
+                        }
+                    }
+                },
+                crosshair: {
+                    line: { color: '#555', width: 1, dashPattern: [4, 4] }
+                }
+            },
+            interaction: { mode: 'index', intersect: false },
+            hover: { mode: 'index', intersect: false }
         }
     });
+
+    // Crosshair plugin (vertical line at cursor)
+    const crosshairPlugin = {
+        id: 'crosshair',
+        afterDraw(chart) {
+            if (chart.tooltip?._active?.length) {
+                const x = chart.tooltip._active[0].element.x;
+                const ctx = chart.ctx;
+                const top = chart.chartArea.top;
+                const bottom = chart.chartArea.bottom;
+                ctx.save();
+                ctx.setLineDash([4, 4]);
+                ctx.strokeStyle = '#555';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(x, top);
+                ctx.lineTo(x, bottom);
+                ctx.stroke();
+                ctx.restore();
+            }
+        }
+    };
+    Chart.register(crosshairPlugin);
 }
 
 let rollingWindow = parseInt(localStorage.getItem("contra_avg") || "50");
