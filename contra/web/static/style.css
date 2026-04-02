@@ -9,6 +9,7 @@ body {
     color: #d0d0d8;
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     min-height: 100vh;
+    overflow-x: hidden;
 }
 
 /* === Header === */
@@ -675,4 +676,34 @@ tr:first-child td {
 @media (max-width: 900px) {
     main { flex-direction: column; }
     .game-panel { flex: none; }
+}
+
+@media (max-width: 700px) {
+    header {
+        flex-wrap: wrap;
+        gap: 8px;
+        padding: 10px 12px;
+    }
+    .header-right {
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+    .chart-header {
+        flex-direction: column;
+        gap: 8px;
+        align-items: flex-start;
+    }
+    .chart-legend {
+        flex-wrap: wrap;
+        gap: 8px 16px;
+    }
+    .controls-grid {
+        flex-wrap: wrap;
+    }
+    .setting-row input[type="range"] {
+        max-width: 80px;
+    }
+    .tabs {
+        flex-wrap: wrap;
+    }
 }
