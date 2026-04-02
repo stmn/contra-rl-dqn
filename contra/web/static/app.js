@@ -785,7 +785,7 @@ function drawProgressBar(maxScroll, env0Scroll, deathPositions, timeSincePB, pra
     const h = 32;
     progCanvas.height = h;
 
-    const LEVEL_END = 100_000;  // matches feature f[27] = scroll / 100K
+    const LEVEL_END = 3328;  // L1: 13 screens * 256px (from ROM: LEVEL_STOP_SCROLL=$0B +2)
     maxScroll = LEVEL_END;
 
     // Dark background

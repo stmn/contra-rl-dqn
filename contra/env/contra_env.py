@@ -307,9 +307,9 @@ class ContraEnv(gym.Env):
         elif scroll_delta > 1000:
             scroll_delta = 0  # ignore glitches
 
-        # Speed bonus: faster scroll = more reward per pixel
-        speed_multiplier = 1.0 + min(scroll_delta / 100.0, 1.0)
-        scroll_reward = scroll_delta * 0.08 * speed_multiplier
+        # Speed bonus: faster scroll = more reward per screen unit
+        speed_multiplier = 1.0 + min(scroll_delta / 5.0, 1.0)
+        scroll_reward = scroll_delta * 1.6 * speed_multiplier
         total_reward += scroll_reward
         self._reward_scroll += scroll_reward
         self._prev_scroll = scroll
@@ -490,7 +490,7 @@ class ContraEnv(gym.Env):
         f[26] = np.clip((y_vel if y_vel < 128 else y_vel - 256) / 128.0 + 0.5, 0.0, 1.0)
 
         # Level progress (1 feature)
-        f[27] = min(self._cumulative_scroll / 100_000.0, 1.0)
+        f[27] = min(self._cumulative_scroll / 3328.0, 1.0)  # L1: 13 screens * 256px
 
         return f
 
