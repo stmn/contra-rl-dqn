@@ -211,8 +211,8 @@ class ContraEnv(gym.Env):
         self._total_reward = 0.0
 
         self._raw_scroll_prev = self._read_raw_scroll()
-        self._cumulative_scroll = self._saved_scroll if self._saved_game_state is not None else 0
-        self._prev_scroll = self._cumulative_scroll
+        self._cumulative_scroll = 0
+        self._prev_scroll = 0
         self._reward_scroll = 0.0
         self._reward_kills = 0.0
         self._reward_turret = 0.0
