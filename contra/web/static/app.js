@@ -799,12 +799,10 @@ function drawProgressBar(maxScroll, env0Scroll, deathPositions, timeSincePB, pra
     }
 
     // Progress fill — how far env 0 is right now
-    const actualScroll = practiceScroll > 0 ? practiceScroll + env0Scroll : env0Scroll;
-    const progress = Math.min(actualScroll / maxScroll, 1.0);
-    const fillStart = practiceScroll > 0 ? Math.floor((practiceScroll / maxScroll) * w) : 0;
+    const progress = Math.min(env0Scroll / maxScroll, 1.0);
     const fillW = Math.floor(progress * w);
     progCtx.fillStyle = "rgba(76, 175, 80, 0.25)";
-    progCtx.fillRect(fillStart, 0, fillW - fillStart, h);
+    progCtx.fillRect(0, 0, fillW, h);
 
     // Current position marker
     progCtx.fillStyle = "#4CAF50";
