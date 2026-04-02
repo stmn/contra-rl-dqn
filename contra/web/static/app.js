@@ -785,7 +785,8 @@ function drawProgressBar(maxScroll, env0Scroll, deathPositions, timeSincePB, pra
     const h = 32;
     progCanvas.height = h;
 
-    if (maxScroll <= 0) maxScroll = 1;
+    const LEVEL_END = 100_000;  // matches feature f[27] = scroll / 100K
+    maxScroll = LEVEL_END;
 
     // Dark background
     progCtx.fillStyle = "#0a0a0f";
@@ -818,12 +819,16 @@ function drawProgressBar(maxScroll, env0Scroll, deathPositions, timeSincePB, pra
         progCtx.fillText("P", px + 4, 10);
     }
 
-    // PB line at right edge (100%)
-    progCtx.fillStyle = "rgba(255, 204, 0, 0.5)";
-    progCtx.fillRect(w - 2, 0, 2, h);
-    progCtx.font = "9px monospace";
-    progCtx.fillStyle = "#ffcc00";
-    progCtx.fillText("PB", w - 16, 10);
+    // PB line at actual personal best position
+    const pbScroll = cachedMaxScroll || 0;
+    if (pbScroll > 0) {
+        const pbX = Math.floor((pbScroll / LEVEL_END) * w);
+        progCtx.fillStyle = "rgba(255, 204, 0, 0.5)";
+        progCtx.fillRect(pbX - 1, 0, 2, h);
+        progCtx.font = "9px monospace";
+        progCtx.fillStyle = "#ffcc00";
+        progCtx.fillText("PB", pbX - 16, 10);
+    }
 
     // Percentage text
     const pct = Math.floor(progress * 100);
