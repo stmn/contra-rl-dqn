@@ -490,6 +490,10 @@ let knownBossLevels = [];
 function updateChart() {
     const ranged = allRewards.slice(-dataRange);
     const rangedSurv = allSurvival.slice(-dataRange);
+    // Pad boss history to match reward history length (boss tracking added later)
+    if (allBoss.length < allRewards.length) {
+        allBoss = new Array(allRewards.length - allBoss.length).fill(-1).concat(allBoss);
+    }
     const rangedBoss = allBoss.slice(-dataRange);
     const startEp = Math.max(0, allRewards.length - dataRange);
 
