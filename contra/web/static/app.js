@@ -10,7 +10,7 @@ let frameWs;
 let latestBitmap = null;
 let agentBitmap = null;
 let newFrameReady = false;
-let liveScroll = 0;
+let liveScroll = -1;
 let liveEpisode = 0;
 let swappedView = false;
 let highlightCoord = null; // {x, y} in NES coords (256x240)
@@ -861,7 +861,7 @@ setInterval(async () => {
 
 // Redraw progress bar every frame using live scroll from frame WS
 function updateProgressBar() {
-    drawProgressBar(cachedMaxScroll, liveScroll, cachedDeaths, cachedTimeSincePB, cachedPracticeScroll);
+    drawProgressBar(cachedMaxScroll, Math.max(0, liveScroll), cachedDeaths, cachedTimeSincePB, cachedPracticeScroll);
     requestAnimationFrame(updateProgressBar);
 }
 requestAnimationFrame(updateProgressBar);
