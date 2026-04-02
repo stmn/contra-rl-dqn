@@ -299,27 +299,17 @@ function updateStats(s) {
         }
     }
 
-    // Practice stats
-    const practicePanel = $("#practice-stats");
-    if (practicePanel) {
-        if (s.practice && s.practice_rewards && s.practice_rewards.length > 0) {
-            practicePanel.style.display = "";
-            const pr = s.practice_rewards;
-            const avg = pr.reduce((a, b) => a + b, 0) / pr.length;
-            const best = Math.max(...pr);
-            const worst = Math.min(...pr);
-            const last10 = pr.slice(-10);
-            const avg10 = last10.reduce((a, b) => a + b, 0) / last10.length;
-            $("#practice-stats-content").innerHTML = `
-                <div class="stat-row"><span class="stat-label">Episodes</span><span class="stat-value">${pr.length}</span></div>
-                <div class="stat-row"><span class="stat-label">Avg reward</span><span class="stat-value">${avg.toFixed(0)}</span></div>
-                <div class="stat-row"><span class="stat-label">Avg last 10</span><span class="stat-value">${avg10.toFixed(0)}</span></div>
-                <div class="stat-row"><span class="stat-label">Best</span><span class="stat-value" style="color:#4CAF50">${best.toFixed(0)}</span></div>
-                <div class="stat-row"><span class="stat-label">Worst</span><span class="stat-value" style="color:#ff4444">${worst.toFixed(0)}</span></div>
-            `;
-        } else {
-            practicePanel.style.display = "none";
+    // Practice mode: swap chart data to practice rewards
+    if (s.practice && s.practice_rewards && s.practice_rewards.length > 0) {
+        allPracticeRewards = s.practice_rewards;
+        if (!practiceMode) {
+            practiceMode = true;
+            updateChart();
         }
+    } else if (practiceMode) {
+        practiceMode = false;
+        allPracticeRewards = [];
+        updateChart();
     }
 
     // Update Agent Input features
@@ -514,6 +504,8 @@ rangeSlider.addEventListener("input", () => {
 let allRewards = [];
 let allSurvival = [];
 let allBoss = [];
+let allPracticeRewards = [];
+let practiceMode = false;
 
 function computeRollingAvg(arr) {
     const avg = [];
@@ -554,14 +546,22 @@ const BOSS_COLORS = ['#e040fb','#00bcd4','#ff9800','#4CAF50','#ff5722','#9c27b0'
 let knownBossLevels = [];
 
 function updateChart() {
-    const ranged = allRewards.slice(-dataRange);
-    const rangedSurv = allSurvival.slice(-dataRange);
-    // Pad boss history to match reward history length (boss tracking added later)
-    if (allBoss.length < allRewards.length) {
+    const source = practiceMode ? allPracticeRewards : allRewards;
+    const ranged = source.slice(-dataRange);
+    const rangedSurv = practiceMode ? [] : allSurvival.slice(-dataRange);
+    if (!practiceMode && allBoss.length < allRewards.length) {
         allBoss = new Array(allRewards.length - allBoss.length).fill(-1).concat(allBoss);
     }
-    const rangedBoss = allBoss.slice(-dataRange);
-    const startEp = Math.max(0, allRewards.length - dataRange);
+    const rangedBoss = practiceMode ? [] : allBoss.slice(-dataRange);
+    const startEp = Math.max(0, source.length - dataRange);
+
+    // Update chart title to show mode
+    const chartTitle = document.querySelector(".chart-container h2");
+    if (chartTitle) {
+        chartTitle.innerHTML = practiceMode
+            ? '<i data-lucide="trending-up" class="icon-heading"></i> Practice Rewards'
+            : '<i data-lucide="trending-up" class="icon-heading"></i> Reward History';
+    }
 
     const avgRewards = computeRollingAvg(ranged);
     const avgSurv = computeRollingAvg(rangedSurv);
