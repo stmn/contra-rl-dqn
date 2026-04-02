@@ -861,8 +861,7 @@ setInterval(async () => {
 
 // Redraw progress bar every frame using live scroll from frame WS
 function updateProgressBar() {
-    const displayScroll = cachedPracticeScroll > 0 ? cachedPracticeScroll + liveScroll : liveScroll;
-    drawProgressBar(cachedMaxScroll, displayScroll, cachedDeaths, cachedTimeSincePB, cachedPracticeScroll);
+    drawProgressBar(cachedMaxScroll, liveScroll, cachedDeaths, cachedTimeSincePB, cachedPracticeScroll);
     requestAnimationFrame(updateProgressBar);
 }
 requestAnimationFrame(updateProgressBar);
