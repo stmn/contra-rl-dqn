@@ -299,6 +299,29 @@ function updateStats(s) {
         }
     }
 
+    // Practice stats
+    const practicePanel = $("#practice-stats");
+    if (practicePanel) {
+        if (s.practice && s.practice_rewards && s.practice_rewards.length > 0) {
+            practicePanel.style.display = "";
+            const pr = s.practice_rewards;
+            const avg = pr.reduce((a, b) => a + b, 0) / pr.length;
+            const best = Math.max(...pr);
+            const worst = Math.min(...pr);
+            const last10 = pr.slice(-10);
+            const avg10 = last10.reduce((a, b) => a + b, 0) / last10.length;
+            $("#practice-stats-content").innerHTML = `
+                <div class="stat-row"><span class="stat-label">Episodes</span><span class="stat-value">${pr.length}</span></div>
+                <div class="stat-row"><span class="stat-label">Avg reward</span><span class="stat-value">${avg.toFixed(0)}</span></div>
+                <div class="stat-row"><span class="stat-label">Avg last 10</span><span class="stat-value">${avg10.toFixed(0)}</span></div>
+                <div class="stat-row"><span class="stat-label">Best</span><span class="stat-value" style="color:#4CAF50">${best.toFixed(0)}</span></div>
+                <div class="stat-row"><span class="stat-label">Worst</span><span class="stat-value" style="color:#ff4444">${worst.toFixed(0)}</span></div>
+            `;
+        } else {
+            practicePanel.style.display = "none";
+        }
+    }
+
     // Update Agent Input features
     if (s.features && s.features.length > 0) {
         const grid = $("#features-grid");

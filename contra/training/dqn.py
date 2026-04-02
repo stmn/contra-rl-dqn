@@ -465,6 +465,12 @@ class DQNTrainer:
             if done:
                 is_practice = self.env.unwrapped._practice
 
+                # Track practice episodes separately
+                if is_practice and self.frame_buffer:
+                    self.frame_buffer.practice_rewards.append(ep_reward)
+                    if len(self.frame_buffer.practice_rewards) > 500:
+                        self.frame_buffer.practice_rewards = self.frame_buffer.practice_rewards[-500:]
+
                 # Only record stats for non-practice episodes
                 if not is_practice:
                     if self.on_episode:
