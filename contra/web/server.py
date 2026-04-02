@@ -157,6 +157,7 @@ async def get_level_data():
         "max_scroll": max(_tracker.max_scroll(), _frame_buffer.env0_scroll if _frame_buffer else 0),
         "env0_scroll": _frame_buffer.env0_scroll if _frame_buffer else 0,
         "time_since_pb": round(_tracker.time_since_pb()),
+        "practice_scroll": _frame_buffer.practice_scroll if _frame_buffer and hasattr(_frame_buffer, 'practice_scroll') else 0,
     }
 
 

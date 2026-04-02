@@ -107,6 +107,7 @@ class ContraEnv(gym.Env):
         self._death_this_frame = False
         self._prev_score = 0
         self._saved_game_state: np.ndarray | None = None
+        self._saved_scroll: int = 0
         self._practice = False
         self._prev_enemy_hp = [0] * 16  # track $578+slot for hit reward
         self._prev_weapon = 0
@@ -171,6 +172,7 @@ class ContraEnv(gym.Env):
     def save_game_state(self) -> None:
         """Save current NES state. Future resets will load from here (practice mode)."""
         self._saved_game_state = self._nes.save()
+        self._saved_scroll = self._cumulative_scroll
         self._practice = True
 
     def clear_game_state(self) -> None:
@@ -209,8 +211,8 @@ class ContraEnv(gym.Env):
         self._total_reward = 0.0
 
         self._raw_scroll_prev = self._read_raw_scroll()
-        self._cumulative_scroll = 0
-        self._prev_scroll = 0
+        self._cumulative_scroll = self._saved_scroll if self._saved_game_state is not None else 0
+        self._prev_scroll = self._cumulative_scroll
         self._reward_scroll = 0.0
         self._reward_kills = 0.0
         self._reward_turret = 0.0

@@ -37,6 +37,7 @@ class SharedFrameBuffer:
         self.buffer_size: int = 0
         self.buffer_capacity: int = 0
         self.practice_rewards: list[float] = []
+        self.practice_scroll: int = 0
         self.action_counts: list[int] = [0] * 16
         self.tracker = None
         self._env_frame_buffers: list[list] = [[] for _ in range(num_envs)]  # raw frames for replay

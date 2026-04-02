@@ -416,9 +416,13 @@ class DQNTrainer:
                     self.save(str(self._checkpoint_dir / "pre_practice.pt"))
                     self.env.unwrapped.save_game_state()
                     self.controls.practice_mode = True
+                    if self.frame_buffer:
+                        self.frame_buffer.practice_scroll = self.env.unwrapped._cumulative_scroll
                     print("Model saved to pre_practice.pt — practice mode ON")
                 if self.controls.consume_clear_state():
                     self.env.unwrapped.clear_game_state()
+                    if self.frame_buffer:
+                        self.frame_buffer.practice_scroll = 0
                     print("Practice mode OFF (pre_practice.pt available for rollback)")
                 if self.controls.consume_restart():
                     obs, info = self.env.reset()

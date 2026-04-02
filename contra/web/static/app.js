@@ -780,7 +780,7 @@ const progCtx = progCanvas.getContext("2d");
 
 let deathMarkers = []; // accumulate death positions as 0.0-1.0
 
-function drawProgressBar(maxScroll, env0Scroll, deathPositions, timeSincePB) {
+function drawProgressBar(maxScroll, env0Scroll, deathPositions, timeSincePB, practiceScroll) {
     const w = progCanvas.width = progCanvas.clientWidth;
     const h = 32;
     progCanvas.height = h;
@@ -807,6 +807,16 @@ function drawProgressBar(maxScroll, env0Scroll, deathPositions, timeSincePB) {
     // Current position marker
     progCtx.fillStyle = "#4CAF50";
     progCtx.fillRect(fillW - 2, 0, 3, h);
+
+    // Practice start line (blue)
+    if (practiceScroll > 0) {
+        const px = Math.floor((practiceScroll / maxScroll) * w);
+        progCtx.fillStyle = "#2196F3";
+        progCtx.fillRect(px - 1, 0, 3, h);
+        progCtx.font = "9px monospace";
+        progCtx.fillStyle = "#2196F3";
+        progCtx.fillText("P", px + 4, 10);
+    }
 
     // PB line at right edge (100%)
     progCtx.fillStyle = "rgba(255, 204, 0, 0.5)";
@@ -836,6 +846,7 @@ function drawProgressBar(maxScroll, env0Scroll, deathPositions, timeSincePB) {
 let cachedDeaths = [];
 let cachedMaxScroll = 1;
 let cachedTimeSincePB = 0;
+let cachedPracticeScroll = 0;
 
 setInterval(async () => {
     try {
@@ -844,12 +855,13 @@ setInterval(async () => {
         cachedDeaths = d.death_positions;
         cachedMaxScroll = d.max_scroll;
         cachedTimeSincePB = d.time_since_pb;
+        cachedPracticeScroll = d.practice_scroll || 0;
     } catch (e) { /* ignore */ }
 }, 3000);
 
 // Redraw progress bar every frame using live scroll from frame WS
 function updateProgressBar() {
-    drawProgressBar(cachedMaxScroll, liveScroll, cachedDeaths, cachedTimeSincePB);
+    drawProgressBar(cachedMaxScroll, liveScroll, cachedDeaths, cachedTimeSincePB, cachedPracticeScroll);
     requestAnimationFrame(updateProgressBar);
 }
 requestAnimationFrame(updateProgressBar);
