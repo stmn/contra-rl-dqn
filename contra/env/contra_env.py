@@ -45,8 +45,8 @@ ACTIONS = [
 RAM_PLAYER_STATE = 0x0090  # 0=falling/respawn, 1=alive, 2=dead
 RAM_LEVEL = 0x0030         # 0-7 = stage 1-8
 RAM_PLAYER_MODE = 0x0022   # 0=1P, 1=2P
-RAM_SCROLL_HI = 0x0060     # camera scroll coarse (tiles, wraps 0-255)
-RAM_SCROLL_LO = 0x0065     # camera scroll fine (pixels within tile)
+RAM_SCROLL_HI = 0x0064     # LEVEL_SCREEN_NUMBER (screen index, from ROM)
+RAM_SCROLL_LO = 0x0065     # LEVEL_SCREEN_SCROLL_OFFSET (pixels within screen)
 RAM_SCORE = 0x07E2         # Player 1 score (2 bytes, low byte)
 RAM_ENEMY_HP_BASE = 0x0580 # Enemy HP per slot (16 slots), counts down to 0 = destroyed
 RAM_WEAPON = 0x00AA        # Player 1 current weapon (low 3 bits: 0=R,1=M,2=F,3=S,4=L,5=B)
