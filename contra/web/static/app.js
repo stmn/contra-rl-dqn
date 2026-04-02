@@ -857,7 +857,7 @@ setInterval(async () => {
         cachedTimeSincePB = d.time_since_pb;
         cachedPracticeScroll = d.practice_scroll || 0;
     } catch (e) { /* ignore */ }
-}, 3000);
+}, 1000);
 
 // Redraw progress bar every frame using live scroll from frame WS
 function updateProgressBar() {
@@ -1093,3 +1093,10 @@ connectFrameWS();
 connectStatsWS();
 loadHistory();
 loadConfig();
+// Fetch level data immediately (progress bar)
+fetch("/api/level").then(r => r.json()).then(d => {
+    cachedDeaths = d.death_positions;
+    cachedMaxScroll = d.max_scroll;
+    cachedTimeSincePB = d.time_since_pb;
+    cachedPracticeScroll = d.practice_scroll || 0;
+}).catch(() => {});
