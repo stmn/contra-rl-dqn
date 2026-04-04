@@ -4,30 +4,38 @@ What you're watching is an AI agent learning to play Contra, the classic NES gam
 
 Let me walk you through what you see on screen.
 
-On the left is the live game preview. This is the actual NES game running in an emulator. The agent controls the player in real time. In the bottom right corner, you can see a smaller view — that is the processed image the agent actually sees: a grayscale, downscaled version with a sprite overlay. Enemy and bullet positions are read directly from the game's RAM and drawn onto the frame as geometric shapes — rectangles for soldiers, circles for bullets, triangles for turrets, diamonds for bonuses. This helps the neural network recognize threats more easily.
+On the left is the live game preview. This is the actual NES game running in a headless emulator called cynes. The agent controls the player in real time. In the bottom right corner, you can see a smaller view — that is the processed image the agent actually sees: a grayscale, downscaled version with a sprite overlay. Enemy and bullet positions are read directly from the game's RAM and drawn onto the frame as geometric shapes — rectangles for soldiers, circles for bullets, triangles for turrets, diamonds for bonuses. This helps the neural network recognize threats more easily.
 
-You can click the game preview to swap the main view with the agent view.
+You can click the game preview to swap the main view with the agent view. Hovering over coordinates in the dashboard draws a yellow crosshair on the game canvas, so you can verify what the agent sees matches the actual game.
 
-Below the game preview, there is a row of admin control buttons. Pause stops and resumes training. Restart forces the current episode to end and starts a new game. Save Model creates a manual checkpoint of the neural network weights. Best Replay opens a recording of the agent's best run so far.
+In the header, you can see the current level, episode number, training time, replay buffer usage, and RAM consumption. The live badge shows whether the dashboard is connected to the training process.
 
-There is also a second row with Save State and Clear State. Save State captures the current game moment — from that point on, the agent will respawn here after every death instead of restarting the level. This is practice mode, useful for training on specific sections like boss fights. Stats are not recorded during practice. Clear State removes the saved position and returns to normal training.
+Below the game preview, there are admin control buttons. The first three are icon-only: pause and resume, loop toggle for auto-restart after game over, and reset to force a new episode. Then there is Save Model to create a manual checkpoint, Replay to watch the best recorded run for the current level, Save State to capture the current game moment for practice mode, and Clear State to exit practice.
 
-On the right side, you have several tabs.
+Practice mode is useful for training on specific sections, like boss fights. When active, the agent respawns at the saved position after every death instead of restarting the level. A blue marker appears on the progress bar showing where practice starts. Statistics are tracked separately during practice.
 
-The Training tab shows core statistics. Total episodes is how many complete games the agent has played. Each episode is one full game with three lives. Timesteps is the total number of individual frames processed — each one is a decision point where the agent chooses an action. Steps per second shows training speed. Hit time limit shows the percentage of games that ended because of the safety time limit rather than a game over. Auto-rollbacks counts how many times the model was automatically reverted to a previous checkpoint because performance dropped significantly.
+On the right side, you have five tabs.
 
-The Top Runs tab shows the best games the agent has ever played, ranked by total reward.
+The Overview tab shows core training statistics — total episodes, timesteps, steps per second, timeout percentage, auto-rollbacks, and when the last auto-save happened.
 
-The Agent Input tab shows the raw numerical features the agent receives from the game's memory — enemy positions, distances, velocities. These twenty-eight values, combined with the pixel image, form the agent's complete understanding of the game state.
+The Live tab is for real-time debugging. It has five sub-tabs. Rewards shows a breakdown of the current episode: scroll reward, kill reward, turret and boss hits, weapon upgrades, and death penalties — each color-coded. Events shows a live feed of what happened in the current run — kills, deaths, turret hits, weapon pickups, boss encounters — with timestamps. You can copy any event to clipboard. Agent View shows what the agent currently sees: player position, weapon, visible enemies with their type, position and distance, visible bullets, and other objects. Unknown enemy types are highlighted in orange for investigation. Features shows the raw twenty-eight dimensional vector the agent receives — player position, weapon type, enemy positions, velocities, HP values, invincibility timer, and level progress. Actions shows how often the agent picks each button combination.
 
-The Agent Output tab shows action usage — how often the agent picks each button combination. A healthy agent uses many different actions. If one action dominates, the policy might be stuck.
+The Leaderboard tab shows the best runs for the current level, ranked by total reward.
 
-The Config tab lists all training parameters: learning rate, replay buffer size, epsilon decay, and which features are enabled — like hybrid observation and prioritised experience replay. Hover over any parameter to see a tooltip explaining what it does.
+The Levels tab lets you switch between all eight Contra levels. Each level has its own neural network model, replay buffer, and statistics. You can switch levels using the buttons or keyboard shortcuts — Command or Control plus one through eight. Level names come from the original ROM: Jungle, Base 1, Waterfall, Base 2, Snow Field, Energy Zone, Hangar, and Alien's Lair.
 
-Below the main panels is the Level Progress bar. The green bar shows how far the agent is in the current run. Red marks show where the agent has died before — a death heatmap. The yellow line on the right marks the personal best — the furthest point ever reached.
+The Config tab lists all training parameters and feature flags with tooltips explaining each one.
 
-At the bottom is the Reward History chart. The red area shows raw reward per episode. The yellow line is the rolling average — this is the key metric. When it trends upward, the agent is improving. You can switch between chart and table view, adjust the averaging window, and filter the data range. The current average values are displayed in the legend below the chart.
+Below the main panels is the Level Progress bar. The green bar shows how far the agent is in the current run. Red marks show where the agent has died before — forming a death heatmap. The yellow PB line marks the personal best for this level.
 
-You can also watch the agent play in a separate emulator with full NES audio. Using FCEUX, a standard NES emulator, the trained model controls the game in real time while you hear the original Contra soundtrack and sound effects. The agent receives the screen pixels and game memory from FCEUX, applies the same processing as during training, and sends back its chosen actions.
+At the bottom is the Reward History chart. The red area shows raw reward per episode. The yellow line is the rolling average. The purple line shows the percentage of episodes where the agent reached the boss. You can toggle each dataset with checkboxes, switch between chart and table view, adjust the averaging window, and filter the data range. Hovering over the chart shows a crosshair with values for all visible datasets.
 
-This agent uses a Deep Q-Network with double DQN, prioritised experience replay, and a hybrid observation model that combines pixel vision with direct game memory features. It trains twenty-four seven on a Mac Mini with Apple Silicon GPU acceleration.
+The agent uses Rainbow DQN — a combination of five extensions to the Deep Q-Network algorithm. Double DQN reduces value overestimation. Prioritised experience replay samples surprising transitions more often. Dueling architecture separates state value from action advantage. Noisy networks add learnable noise to weights for exploration without epsilon-greedy. And N-step returns use multi-step reward bootstrapping for faster credit assignment.
+
+The observation model is hybrid — it combines convolutional neural network processing of the pixel image with twenty-eight numerical features extracted from the game's RAM. These features include player position, weapon type, the three nearest enemies with their positions, velocities and HP, the three nearest bullets, enemy count, invincibility timer, and level progress.
+
+Enemy types and game mechanics were identified using a complete disassembly of the Contra ROM, available on GitHub. This gave us accurate RAM addresses, score tables, weapon codes, and boss detection flags.
+
+You can also watch the agent play with real NES audio using FCEUX, a standard NES emulator. The trained model receives screen pixels and RAM data from FCEUX through a file bridge, applies the same overlay and processing as during training, and sends back its chosen actions. The agent plays slightly worse in FCEUX due to input latency from the file communication.
+
+This agent trains twenty-four seven on a Mac Mini with Apple Silicon GPU acceleration.
