@@ -244,6 +244,7 @@ function updateStats(s) {
                 <div class="stat-row"><span class="stat-label" style="color:#2196F3">Turret/Boss hits</span><span class="stat-value" style="color:#2196F3">+${(r.reward_turret || 0).toFixed(0)} (${r.turret_hits || 0} hits)</span></div>
                 <div class="stat-row"><span class="stat-label" style="color:#e040fb">Weapon upgrade</span><span class="stat-value" style="color:#e040fb">+${(r.reward_weapon || 0).toFixed(0)}</span></div>
                 <div class="stat-row"><span class="stat-label" style="color:#ff4444">Death penalty</span><span class="stat-value" style="color:#ff4444">${(r.reward_death || 0).toFixed(0)}</span></div>
+                <div class="stat-row"><span class="stat-label" style="color:#888">Stagnation</span><span class="stat-value" style="color:#888">${(r.reward_stagnation || 0).toFixed(0)}</span></div>
             `;
         }
         const ev = $("#run-log-events");

@@ -90,6 +90,7 @@ class StreamCapture(gym.Wrapper):
                 "reward_kills": info.get("reward_kills", 0),
                 "reward_turret": info.get("reward_turret", 0),
                 "reward_weapon": info.get("reward_weapon", 0),
+                "reward_stagnation": info.get("reward_stagnation", 0),
                 "turret_hits": info.get("turret_hits", 0),
                 "events": info.get("events", []),
                 "player": {"x": px, "y": py, "weapon": weapon},
