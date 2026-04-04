@@ -48,7 +48,6 @@ RAM_PLAYER_MODE = 0x0022   # 0=1P, 1=2P
 RAM_SCROLL_HI = 0x0064     # LEVEL_SCREEN_NUMBER (screen index, from ROM)
 RAM_SCROLL_LO = 0x0065     # LEVEL_SCREEN_SCROLL_OFFSET (pixels within screen)
 RAM_SCORE = 0x07E2         # Player 1 score (2 bytes, low byte)
-RAM_ENEMY_HP_BASE = 0x0580 # Enemy HP per slot (16 slots), counts down to 0 = destroyed
 RAM_WEAPON = 0x00AA        # Player 1 current weapon (low 3 bits: 0=R,1=M,2=F,3=S,4=L,5=B)
 
 # Action categories for reward shaping
@@ -103,7 +102,6 @@ class ContraEnv(gym.Env):
         self._last_frame: np.ndarray | None = None
         self._raw_frame: np.ndarray | None = None
         self._force_restart = False
-        self._idle_counter = 0
         self._death_this_frame = False
         self._prev_score = 0
         self._saved_game_state: np.ndarray | None = None
@@ -120,7 +118,6 @@ class ContraEnv(gym.Env):
         self._reward_death = 0.0
         self._reward_kills = 0.0
         self._reward_turret = 0.0
-        self._reward_idle = 0.0
         self._death_count = 0
         self._turret_hits = 0
         self._events: list[tuple[int, str]] = []  # (step, description)
@@ -229,8 +226,6 @@ class ContraEnv(gym.Env):
         self._reward_scroll = 0.0
         self._reward_kills = 0.0
         self._reward_turret = 0.0
-        self._reward_idle = 0.0
-        self._idle_counter = 0
         self._death_this_frame = False
         self._prev_score = self._nes[RAM_SCORE] + self._nes[RAM_SCORE + 1] * 256
         self._reward_death = 0.0
@@ -411,7 +406,6 @@ class ContraEnv(gym.Env):
             "reward_death": round(self._reward_death, 1),
             "reward_kills": round(self._reward_kills, 1),
             "reward_turret": round(self._reward_turret, 1),
-            "reward_idle": round(self._reward_idle, 1),
             "reward_weapon": round(self._reward_weapon, 1),
             "death_count": self._death_count,
             "turret_hits": self._turret_hits,
