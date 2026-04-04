@@ -280,6 +280,11 @@ async def get_config():
             "hybrid_observation": settings.hybrid_observation,
             "prioritised_replay": settings.prioritised_replay,
             "overlay_sprites": settings.overlay_sprites,
+            "dueling_dqn": settings.dueling_dqn,
+            "noisy_nets": settings.noisy_nets,
+            "n_step_returns": settings.n_step_returns,
+            "huber_loss": settings.huber_loss,
+            "gradient_clip": settings.gradient_clip,
         },
         "rewards": {
             "death_penalty": settings.death_penalty,

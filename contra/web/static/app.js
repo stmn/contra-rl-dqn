@@ -1019,6 +1019,11 @@ const CONFIG_TIPS = {
     per: "Whether Prioritised Experience Replay is active.",
     frame_skip: "Agent makes a decision every N frames. Reduces computation and gives actions time to take effect.",
     max_episode_steps: "Safety limit — episode ends after this many steps even if agent is still alive.",
+    dueling_dqn: "Separate V(state) + A(action) streams. Agent learns state value independently from action advantage.",
+    noisy_nets: "Learnable noise in network weights for exploration. Replaces epsilon-greedy — no random actions, noise adapts during training.",
+    n_step_returns: "Multi-step reward bootstrapping. 3 = look 3 steps ahead for reward. Faster credit assignment for delayed consequences.",
+    huber_loss: "Smooth L1 loss instead of MSE. More robust to large outliers like death penalty -500.",
+    gradient_clip: "Maximum gradient norm. Prevents exploding gradients from destabilizing training.",
 };
 
 async function loadConfig() {
