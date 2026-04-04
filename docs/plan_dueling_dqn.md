@@ -1,21 +1,21 @@
 # Plan: Dueling DQN
 
-## Pomysł
+## Idea
 
-Rozdzielić Q-value na dwa strumienie:
-- **V(s)** — wartość stanu (jak dobra jest ta sytuacja niezależnie od akcji)
-- **A(s,a)** — przewaga akcji (jak dobra jest ta akcja vs średnia)
+Split Q-value into two streams:
+- **V(s)** — state value (how good is this situation regardless of action)
+- **A(s,a)** — action advantage (how good is this action vs average)
 
 Q(s,a) = V(s) + A(s,a) - mean(A)
 
-Agent uczy się że niektóre stany są złe niezależnie od akcji (np. stanie przed pociskiem = niskie V). Nie musi próbować wszystkich 16 akcji żeby to odkryć.
+The agent learns that some states are bad regardless of action (e.g., standing in front of a bullet = low V). It doesn't need to try all 16 actions to discover this.
 
-## Zmiana w kodzie
+## Code change
 
-Tylko head sieci — CNN i features_net bez zmian:
+Only the network head — CNN and features_net unchanged:
 
 ```python
-# Teraz:
+# Before:
 self.head = nn.Sequential(
     nn.Linear(512 + 32, 256),
     nn.ReLU(),
@@ -35,30 +35,30 @@ self.advantage_stream = nn.Sequential(
 )
 
 def forward(self, ...):
-    combined = ...  # CNN + features (bez zmian)
+    combined = ...  # CNN + features (unchanged)
     value = self.value_stream(combined)
     advantage = self.advantage_stream(combined)
     q = value + advantage - advantage.mean(dim=1, keepdim=True)
     return q
 ```
 
-## Wpływ
-- ~20 linii kodu zmiany w HybridQNetwork/QNetwork
-- Wymaga retreningu (inna architektura)
-- Potwierdzone 20-30% lepsze wyniki na Atari (Wang et al., 2016)
-- Zero wpływu na resztę pipeline
+## Impact
+- ~20 lines of code change in HybridQNetwork/QNetwork
+- Requires retraining (different architecture)
+- Confirmed 20-30% better results on Atari (Wang et al., 2016)
+- Zero impact on rest of pipeline
 
-## Co mamy z Rainbow DQN (6 ulepszeń)
+## Rainbow DQN progress (6 extensions)
 - [x] Double DQN
 - [x] Prioritised Experience Replay (PER)
-- [ ] **Dueling DQN** ← ten plan
-- [ ] N-step returns
-- [ ] Noisy nets (exploration bez epsilon)
+- [x] **Dueling DQN** ← implemented
+- [x] N-step returns
+- [x] Noisy nets
 - [ ] Distributional RL (C51)
 
 ## Status
-Do wdrożenia. Najniższy koszt, najwyższy oczekiwany zysk.
+Implemented. Feature flag: `DUELING_DQN=true`
 
-## Źródło
+## Source
 Wang et al., "Dueling Network Architectures for Deep Reinforcement Learning", ICML 2016
 https://arxiv.org/abs/1511.06581

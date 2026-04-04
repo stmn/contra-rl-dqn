@@ -1,39 +1,39 @@
 # Plan: Extra Lives Exploration
 
-## Pomysł
+## Idea
 
-Dać agentowi 30 żyć (`$32 = 29`) zamiast 3 żeby mógł eksplorować dalsze sekcje mapy i zbierać doświadczenia. Potem przywrócić 3 życia do właściwego treningu.
+Give the agent 30 lives (`$32 = 29`) instead of 3 so it can explore further sections of the map and collect experiences. Then restore 3 lives for actual training.
 
 ## RAM
 
-- `$32` = Player 1 lives (0 = ostatnie życie, 2 = 3 życia standardowo)
-- `$38` = P1 Game Over Status (0 = gra, 1 = game over)
-- Źródło: https://datacrystal.tcrf.net/wiki/Contra_(NES)/RAM_map
+- `$32` = Player 1 lives (0 = last life, 2 = 3 lives standard)
+- `$38` = P1 Game Over Status (0 = playing, 1 = game over)
+- Source: https://datacrystal.tcrf.net/wiki/Contra_(NES)/RAM_map
 
-## Warianty
+## Variants
 
-### A. Stałe 30 żyć
-- `nes[0x32] = 29` po każdym reset
-- Agent zawsze ma 30 żyć, dociera dalej
-- Problem: death penalty -500 × 30 = -15000, total reward ujemny
-- Rozwiązanie: zmniejszyć death penalty lub ją wyłączyć
+### A. Permanent 30 lives
+- `nes[0x32] = 29` after every reset
+- Agent always has 30 lives, reaches further
+- Problem: death penalty -500 × 30 = -15000, total reward negative
+- Solution: reduce or disable death penalty
 
 ### B. Exploration + training
-- Epizod z 30 życiami BEZ treningu (exploration only, zbieraj doświadczenia do buffera)
-- W losowym momencie: przywróć 3 życia (`nes[0x32] = 2`), WŁĄCZ trening
-- Bufer ma doświadczenia z całej mapy
+- Episode with 30 lives WITHOUT training (exploration only, collect experiences to buffer)
+- At random moment: restore 3 lives (`nes[0x32] = 2`), ENABLE training
+- Buffer has experiences from the entire map
 
 ### C. Konami Code
-- Alternatywa: wpisać Up,Up,Down,Down,Left,Right,Left,Right,B,A na title screen
-- Daje 30 żyć bez modyfikacji RAM
-- Wymaga przejścia przez ekran tytułowy (wolniejszy boot)
+- Alternative: input Up,Up,Down,Down,Left,Right,Left,Right,B,A on title screen
+- Gives 30 lives without RAM modification
+- Requires going through title screen (slower boot)
 
-## Implementacja (RAM)
+## Implementation (RAM)
 ```python
-# W ContraEnv._boot() lub reset(), po załadowaniu initial_state:
+# In ContraEnv._boot() or reset(), after loading initial_state:
 if settings.extra_lives:
     self._nes[0x32] = 29  # 30 lives
 ```
 
 ## Status
-Pomysł na przyszłość. Do wdrożenia gdy agent stagnuje i potrzebuje doświadczeń z dalszych sekcji mapy.
+Future plan. To implement when agent stagnates and needs experiences from later map sections.

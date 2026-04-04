@@ -1,83 +1,82 @@
 # Plan: Mixture of Experts — Segments
 
-## Pomysł
+## Idea
 
-Podzielić level na segmenty. Każdy segment ma osobny model (sieć + replay buffer). Router przełącza na podstawie scroll position. Agent trenuje wszystkie segmenty jednocześnie.
+Split a level into segments. Each segment has its own model (network + replay buffer). Router switches based on scroll position. Agent trains all segments simultaneously.
 
-## Kluczowy problem: rzadkie segmenty
+## Key problem: rare segments
 
-Jeśli agent dochodzi do bossa w 5% epizodów, model bossa dostaje 20x mniej doświadczeń. Rozwiązanie: **auto-zbieranie Save State'ów na granicach segmentów**.
+If the agent reaches the boss in 5% of episodes, the boss model gets 20x fewer experiences. Solution: **auto-collecting Save States at segment boundaries**.
 
 ### Auto Save States
-- Gdy agent przekracza granicę segmentu → NES state (`nes.save()`, ~28KB) zapisywany do puli
-- Przy respawnie w segmencie → losowy state z puli (różne sytuacje startowe)
-- 100 stanów = ~2.7MB, 1000 = ~27MB — bez limitu
-- Agent widzi różne ścieżki/bronie/pozycje zamiast jednego zamrożonego momentu
+- When agent crosses a segment boundary → NES state (`nes.save()`, ~28KB) saved to pool
+- On respawn in segment → random state from pool (varied starting situations)
+- 100 states = ~2.7MB, 1000 = ~27MB — no limit needed
+- Agent sees different paths/weapons/positions instead of one frozen moment
 
-## Architektura
+## Architecture
 
-### Segments (znaczniki na mapie)
+### Segments (markers on map)
 ```
 segments = [
-    {"scroll": 30000},  # granica: start → 30K = Segment 0
-    {"scroll": 60000},  # granica: 30K → 60K = Segment 1
-    {"scroll": 90000},  # granica: 60K → boss = Segment 2
+    {"scroll": 30000},  # boundary: start → 30K = Segment 0
+    {"scroll": 60000},  # boundary: 30K → 60K = Segment 1
+    {"scroll": 90000},  # boundary: 60K → boss = Segment 2
 ]
-# Segment 0: od startu do 30K
-# Segment 3: od 90K do końca levelu (boss)
+# Segment 0: start to 30K
+# Segment 3: 90K to end of level (boss)
 ```
-- Ustawiane przez użytkownika w dashboardzie (klik na progress bar lub wpisz wartość)
-- Widoczne na Level Progress bar jako pionowe linie
-- Brak segmentów = jeden model (jak teraz)
+- Set by user in dashboard (click on progress bar or enter scroll value)
+- Visible on Level Progress bar as vertical lines
+- No segments = single model (current behavior)
 
 ### SegmentManager (`contra/training/segments.py`)
-- N instancji QNetwork/HybridQNetwork + N target networks + N replay bufferów
-- Pula Save State'ów per segment (auto-zbierane na granicach)
-- `get_segment(scroll)` → index segmentu
-- `select_action(obs, segment_idx, epsilon)` → forward przez właściwy model
-- `store(segment_idx, transition)` → do właściwego buffera
-- `train_step(segment_idx)` → trenuj właściwy model
-- `save(dir)` / `load(dir)` → wszystkie modele + states
+- N instances of QNetwork/HybridQNetwork + N target networks + N replay buffers
+- Save State pool per segment (auto-collected at boundaries)
+- `get_segment(scroll)` → segment index
+- `select_action(obs, segment_idx, epsilon)` → forward through correct model
+- `store(segment_idx, transition)` → to correct buffer
+- `train_step(segment_idx)` → train correct model
+- `save(dir)` / `load(dir)` → all models + states
 
-### DQN Trainer zmiany
-- Delegacja do SegmentManager zamiast bezpośredniego q_network/buffer
-- Epsilon, global_step — wspólne
+### DQN Trainer changes
+- Delegate to SegmentManager instead of direct q_network/buffer
+- Epsilon, global_step — shared
 - Auto-rollback per segment
 
 ### Dashboard
-- **Segments tab** (zastępuje Practice):
-  - Lista segmentów z scroll position, buffer size, status
+- **Segments tab** (replaces Practice):
+  - Segment list with scroll position, buffer size, status
   - Add/Remove segment
-  - Pula Save State'ów per segment (ilość zebranych)
-- **Level Progress bar** — znaczniki segmentów jako pionowe linie
-- Aktywny segment widoczny (podświetlony)
+  - Save State pool per segment (count collected)
+- **Level Progress bar** — segment markers as vertical lines
+- Active segment highlighted
 
 ### Respawn flow
-1. Agent ginie → episode ends
-2. Nowy episode: wybierz segment do treningu (round-robin lub priorytet)
-3. Załaduj losowy Save State z puli wybranego segmentu
-4. Lub: graj od początku (segment 0) — automatyczne przełączanie modeli
+1. Agent dies → episode ends
+2. New episode: choose segment to train (round-robin or priority)
+3. Load random Save State from chosen segment's pool
+4. Or: play from start (segment 0) — models switch automatically
 
-### Tryb "wszystkie naraz"
-Agent gra od początku. Każdy segment używa swojego modelu. Doświadczenia trafiają do właściwego buffera. Na granicach auto-save state do puli. Jeśli agent ginie w segmencie 2, model segmentu 2 się uczy. Model segmentu 0 też się uczył (z początku tego samego runa).
+### "All at once" mode
+Agent plays from start. Each segment uses its own model. Experiences go to the correct buffer. At boundaries, auto-save state to pool. If agent dies in segment 2, segment 2's model learns. Segment 0's model also learned (from the start of the same run).
 
-## Wyzwania
+## Challenges
 
-1. **Transfer wiedzy** — "unikaj pocisków" trzeba nauczyć w każdym modelu
-   - Rozwiązanie: pre-train na segmencie 0, skopiuj wagi jako start dla nowych segmentów
-2. **Granice** — smooth handoff między modelami
-   - Overlap zone (200px) z interpolacją Q-values
-3. **RAM** — N modeli × ~77MB = dużo
-   - Modele są małe (~2-5MB wag), 77MB to optimizer state
-   - 5 segmentów × 5MB = 25MB wag, akceptowalne
-4. **Save State timing** — state zapisany na granicy może nie być idealny
-   - Pula 100+ stanów mityguje to — różnorodność
+1. **Knowledge transfer** — "dodge bullets" must be learned in each model
+   - Solution: pre-train on segment 0, copy weights as starting point for new segments
+2. **Boundaries** — smooth handoff between models
+   - Overlap zone (200px) with Q-value interpolation
+3. **RAM** — N models × ~77MB = a lot
+   - Models are small (~2-5MB weights), 77MB is optimizer state
+   - 5 segments × 5MB = 25MB weights, acceptable
+4. **Save State timing** — state saved at boundary may not be ideal
+   - Pool of 100+ states mitigates this — diversity
 
 ## Status
 
-Do wdrożenia. Wymaga:
+Partially implemented — per-level models exist. Full segment system (within a level) not yet built. Requires:
 - `contra/training/segments.py` — SegmentManager
 - Refactor DQN trainer
 - Dashboard Segments tab
 - API endpoints
-- Usunięcie Practice mode
