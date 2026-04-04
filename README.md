@@ -8,6 +8,8 @@ An AI agent learning to play **[Contra](https://en.wikipedia.org/wiki/Contra_(vi
 
 ## How It Works
 
+![Architecture](docs/architecture.png)
+
 ### The Agent
 - **Sees**: 128x128 grayscale game frame with sprite overlays + 28 features extracted from RAM (4 [stacked frames](https://danieltakeshi.github.io/2016/11/25/frame-skipping-and-preprocessing-for-deep-q-networks-on-atari-2600-games/) for motion detection)
 - **Decides**: Which of 16 button combinations to press (right, jump, shoot, combinations)
