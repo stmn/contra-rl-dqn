@@ -1,6 +1,6 @@
 # Contra RL — Rainbow DQN
 
-An AI agent learning to play **[Contra](https://en.wikipedia.org/wiki/Contra_(video_game))** (NES, 1988) using [Rainbow DQN](https://arxiv.org/abs/1710.02298) — combining 5 extensions of Deep Q-Network. The agent sees the game screen + RAM features, decides which buttons to press, and improves through thousands of attempts.
+An AI agent learning to play **[Contra](https://en.wikipedia.org/wiki/Contra_(video_game))** (NES, 1988) using [Rainbow DQN](https://arxiv.org/abs/1710.02298) — combining 5 extensions of Deep Q-Network. The agent sees the game screen + game state features extracted from NES RAM, decides which buttons to press, and improves through thousands of attempts.
 
 **Built from scratch with [Claude Code](https://claude.ai/code), just for fun. This is not a solved game — Contra is extremely demanding and achieving human-level play remains an open challenge for reinforcement learning.**
 
@@ -9,7 +9,7 @@ An AI agent learning to play **[Contra](https://en.wikipedia.org/wiki/Contra_(vi
 ## How It Works
 
 ### The Agent
-- **Sees**: 128x128 grayscale game frame with sprite overlays + 28 RAM features (4 [stacked frames](https://danieltakeshi.github.io/2016/11/25/frame-skipping-and-preprocessing-for-deep-q-networks-on-atari-2600-games/) for motion detection)
+- **Sees**: 128x128 grayscale game frame with sprite overlays + 28 features extracted from RAM (4 [stacked frames](https://danieltakeshi.github.io/2016/11/25/frame-skipping-and-preprocessing-for-deep-q-networks-on-atari-2600-games/) for motion detection)
 - **Decides**: Which of 16 button combinations to press (right, jump, shoot, combinations)
 - **Learns from**: Scroll progress, enemy kills, turret/boss damage, weapon upgrades, death penalties
 
@@ -23,7 +23,7 @@ An AI agent learning to play **[Contra](https://en.wikipedia.org/wiki/Contra_(vi
 | **Noisy Nets** | Learnable noise in weights — exploration without epsilon-greedy | `NOISY_NETS` |
 | **N-step Returns** | Multi-step reward bootstrapping — faster credit assignment | `N_STEP_RETURNS` |
 
-Plus: Huber loss (robust to outliers), gradient clipping, hybrid observation (pixels + RAM features).
+Plus: Huber loss (robust to outliers), gradient clipping, hybrid observation (pixels + game state features).
 
 ### Sprite Overlay
 Enemy positions and bullets read from NES RAM and drawn as shape markers (14 enemy types from [ROM disassembly](https://github.com/vermiceli/nes-contra-us)):
@@ -36,7 +36,7 @@ Enemy positions and bullets read from NES RAM and drawn as shape markers (14 ene
 ### Reward System
 | Signal | Value | Purpose |
 |--------|-------|---------|
-| Screen scroll | `scroll_delta * 1.6 * speed_bonus` | Progress through the level |
+| Map progress | `scroll_delta * 1.6 * speed_bonus` | Moving forward through the level |
 | Enemy kill | `score_delta * 15` | Incentivize shooting |
 | Turret/boss hit | `+50 per hit` | Reward damaging multi-HP enemies |
 | Weapon upgrade | `+100 per strength level` | Pick up better weapons (Spread = +300) |
@@ -98,7 +98,7 @@ FCEUX sends screen pixels + RAM to Python. The agent applies overlay and runs in
 
 **Note**: The agent plays worse in FCEUX than in training because:
 - **Input latency** — file-based communication adds ~2 frame delay. In Contra, 2 frames decide between dodging a bullet and dying.
-- **Q-value spread** — early models have nearly identical Q-values for different actions (~0.3 difference on ~980 base). Small pixel differences from FCEUX palette flip the action choice.
+- **Decision instability** — early models assign nearly identical scores to different actions, so small pixel differences between emulators can flip the chosen action entirely.
 
 The web dashboard shows the true agent performance.
 
