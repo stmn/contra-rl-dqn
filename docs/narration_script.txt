@@ -1,41 +1,41 @@
 Welcome to the Contra RL live training dashboard.
 
-What you're watching is an AI agent learning to play Contra, the classic NES game from 1988. It has never seen a human play. Everything it knows, it learned through trial and error — thousands of attempts, dying, and trying again.
+On the left is the live game preview. The agent controls the player in real time. In the bottom right corner is the agent's actual view — a grayscale, downscaled image with sprite overlays. Enemy positions and bullets are read from the game's RAM and drawn as shapes: rectangles for soldiers, circles for bullets, triangles for turrets, diamonds for bonuses. You can click the preview to swap the main and agent views.
 
-Let me walk you through what you see on screen.
+In the header you can see the current level name, episode count, training time, how full the replay buffer is, and RAM usage.
 
-On the left is the live game preview. This is the actual NES game running in a headless emulator called cynes. The agent controls the player in real time. In the bottom right corner, you can see a smaller view — that is the processed image the agent actually sees: a grayscale, downscaled version with a sprite overlay. Enemy and bullet positions are read directly from the game's RAM and drawn onto the frame as geometric shapes — rectangles for soldiers, circles for bullets, triangles for turrets, diamonds for bonuses. This helps the neural network recognize threats more easily.
+Below the preview are the control buttons. First, three icon-only buttons: pause and resume, loop toggle which controls whether the agent auto-restarts after game over, and reset which forces a new episode.
 
-You can click the game preview to swap the main view with the agent view. Hovering over coordinates in the dashboard draws a yellow crosshair on the game canvas, so you can verify what the agent sees matches the actual game.
+Next group: Save Model creates a manual checkpoint of the neural network weights. Replay opens a recording of the best run for the current level.
 
-In the header, you can see the current level, episode number, training time, replay buffer usage, and RAM consumption. The live badge shows whether the dashboard is connected to the training process.
+Last group: Save State captures the current game moment. From that point on, the agent will respawn here after every death instead of restarting the level. This is called practice mode — useful for training on difficult sections like boss fights. A blue marker appears on the progress bar showing where practice begins. Clear State exits practice mode and returns to normal training.
 
-Below the game preview, there are admin control buttons. The first three are icon-only: pause and resume, loop toggle for auto-restart after game over, and reset to force a new episode. Then there is Save Model to create a manual checkpoint, Replay to watch the best recorded run for the current level, Save State to capture the current game moment for practice mode, and Clear State to exit practice.
+Now the tabs on the right side.
 
-Practice mode is useful for training on specific sections, like boss fights. When active, the agent respawns at the saved position after every death instead of restarting the level. A blue marker appears on the progress bar showing where practice starts. Statistics are tracked separately during practice.
+The first tab is Overview. It shows total episodes played, total timesteps processed, training speed in steps per second, what percentage of episodes hit the time limit, how many auto-rollbacks happened, and when the last auto-save occurred.
 
-On the right side, you have five tabs.
+The second tab is Live, which has five sub-tabs for real-time information about the current episode.
 
-The Overview tab shows core training statistics — total episodes, timesteps, steps per second, timeout percentage, auto-rollbacks, and when the last auto-save happened.
+The Rewards sub-tab shows a color-coded breakdown: green for scroll reward, orange for kill reward, blue for turret and boss hits, purple for weapon upgrades, red for death penalties.
 
-The Live tab is for real-time debugging. It has five sub-tabs. Rewards shows a breakdown of the current episode: scroll reward, kill reward, turret and boss hits, weapon upgrades, and death penalties — each color-coded. Events shows a live feed of what happened in the current run — kills, deaths, turret hits, weapon pickups, boss encounters — with timestamps. You can copy any event to clipboard. Agent View shows what the agent currently sees: player position, weapon, visible enemies with their type, position and distance, visible bullets, and other objects. Unknown enemy types are highlighted in orange for investigation. Features shows the raw twenty-eight dimensional vector the agent receives — player position, weapon type, enemy positions, velocities, HP values, invincibility timer, and level progress. Actions shows how often the agent picks each button combination.
+The Events sub-tab shows a timestamped feed of everything that happened in this run. Kills show the enemy type, turret hits show HP changes, deaths and weapon pickups are logged. Each line has a copy button on the left.
 
-The Leaderboard tab shows the best runs for the current level, ranked by total reward.
+The Agent View sub-tab shows exactly what the agent knows right now. Player position and current weapon. A list of visible enemies with their type name, position, distance, and HP for turrets. A list of visible bullets with position and distance. Unknown enemy types appear in orange. Hovering over any coordinates draws a yellow crosshair on the game preview, so you can verify the position matches what you see.
 
-The Levels tab lets you switch between all eight Contra levels. Each level has its own neural network model, replay buffer, and statistics. You can switch levels using the buttons or keyboard shortcuts — Command or Control plus one through eight. Level names come from the original ROM: Jungle, Base 1, Waterfall, Base 2, Snow Field, Energy Zone, Hangar, and Alien's Lair.
+The Features sub-tab shows the raw twenty-eight numbers the agent receives each frame — player position, weapon type, nearest enemies with velocities and HP, nearest bullets, invincibility timer, and level progress. Coordinate features also have hoverable crosshairs.
 
-The Config tab lists all training parameters and feature flags with tooltips explaining each one.
+The Actions sub-tab shows how often the agent picks each of the sixteen button combinations, displayed as percentage bars.
 
-Below the main panels is the Level Progress bar. The green bar shows how far the agent is in the current run. Red marks show where the agent has died before — forming a death heatmap. The yellow PB line marks the personal best for this level.
+The third tab is Leaderboard — the best runs for the current level, ranked by total reward.
 
-At the bottom is the Reward History chart. The red area shows raw reward per episode. The yellow line is the rolling average. The purple line shows the percentage of episodes where the agent reached the boss. You can toggle each dataset with checkboxes, switch between chart and table view, adjust the averaging window, and filter the data range. Hovering over the chart shows a crosshair with values for all visible datasets.
+The fourth tab is Levels. Each of the eight Contra levels has its own neural network model and separate statistics. You can switch levels by clicking the buttons here, or using the keyboard shortcut Command or Control plus one through eight. The level names come from the original ROM: Jungle, Base 1, Waterfall, Base 2, Snow Field, Energy Zone, Hangar, and Alien's Lair.
 
-The agent uses Rainbow DQN — a combination of five extensions to the Deep Q-Network algorithm. Double DQN reduces value overestimation. Prioritised experience replay samples surprising transitions more often. Dueling architecture separates state value from action advantage. Noisy networks add learnable noise to weights for exploration without epsilon-greedy. And N-step returns use multi-step reward bootstrapping for faster credit assignment.
+The fifth tab is Config, listing all training parameters and feature flags. Hover over any parameter to see a tooltip explaining what it does.
 
-The observation model is hybrid — it combines convolutional neural network processing of the pixel image with twenty-eight numerical features extracted from the game's RAM. These features include player position, weapon type, the three nearest enemies with their positions, velocities and HP, the three nearest bullets, enemy count, invincibility timer, and level progress.
+Below the tabs is the Level Progress bar. The green fill shows how far the agent is in the current run. Red marks show where the agent has died in previous runs, forming a death heatmap. The yellow PB line marks the personal best — the furthest point ever reached on this level.
 
-Enemy types and game mechanics were identified using a complete disassembly of the Contra ROM, available on GitHub. This gave us accurate RAM addresses, score tables, weapon codes, and boss detection flags.
+At the bottom is the Reward History chart. The red area shows raw reward for each episode. The yellow line is the rolling average — when it trends upward, the agent is improving. The purple line shows the percentage of episodes where the agent reached the level boss.
 
-You can also watch the agent play with real NES audio using FCEUX, a standard NES emulator. The trained model receives screen pixels and RAM data from FCEUX through a file bridge, applies the same overlay and processing as during training, and sends back its chosen actions. The agent plays slightly worse in FCEUX due to input latency from the file communication.
+Each dataset can be toggled on or off using the checkboxes in the legend. You can switch between chart and table view. Two sliders control the data range and the averaging window size. Hovering over the chart shows a vertical crosshair with values for all visible datasets.
 
-This agent trains twenty-four seven on a Mac Mini with Apple Silicon GPU acceleration.
+You can also use keyboard shortcuts anywhere on the dashboard. Space to pause and resume. Right arrow to advance one step while paused. Command or Control plus a number to switch levels.
