@@ -104,6 +104,7 @@ class ContraEnv(gym.Env):
         self._force_restart = False
         self._death_this_frame = False
         self._prev_score = 0
+        self._stagnation_counter = 0
         self._saved_game_state: np.ndarray | None = None
         self._saved_scroll: int = 0
         self._practice = False
@@ -227,6 +228,7 @@ class ContraEnv(gym.Env):
         self._reward_kills = 0.0
         self._reward_turret = 0.0
         self._death_this_frame = False
+        self._stagnation_counter = 0
         self._prev_score = self._nes[RAM_SCORE] + self._nes[RAM_SCORE + 1] * 256
         self._reward_death = 0.0
         self._death_count = 0
@@ -380,6 +382,15 @@ class ContraEnv(gym.Env):
             self._reached_boss = True
             self._reached_boss_level = level
             self._events.append((self._step_count, f"Reached L{level+1} boss!"))
+
+        # Stagnation penalty: no scroll AND no reward for ~5 seconds
+        _STAGNATION_LIMIT = 5 * 60 // self._frame_skip  # 5 sec × 60fps / frame_skip
+        if scroll_delta > 0 or total_reward > 0:
+            self._stagnation_counter = 0
+        else:
+            self._stagnation_counter += 1
+            if self._stagnation_counter > _STAGNATION_LIMIT:
+                total_reward -= 1.0
 
         # (Death penalty is applied above in frame skip loop)
 
