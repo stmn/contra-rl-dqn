@@ -146,6 +146,9 @@ function formatNumber(n) {
 
 function updateStats(s) {
     currentEpisode = s.env0_episode || s.episode;
+    if (s.current_level !== undefined) {
+        $("#header-level").textContent = `${s.current_level + 1}: ${LEVEL_NAMES[s.current_level]}`;
+    }
     $("#episode").textContent = s.episode.toLocaleString();
     $("#header-episode").textContent = s.episode.toLocaleString();
     $("#header-time").textContent = formatTime(s.training_time);
@@ -180,8 +183,11 @@ function updateStats(s) {
     // Sync pause button state
     const btnPause = $("#btn-pause");
     if (btnPause && s.paused !== undefined) {
-        btnPause.textContent = s.paused ? "Resume" : "Pause";
+        btnPause.innerHTML = s.paused
+            ? '<i data-lucide="play" class="icon-btn"></i>'
+            : '<i data-lucide="pause" class="icon-btn"></i>';
         btnPause.classList.toggle("active", s.paused);
+        lucide.createIcons();
     }
 
     // Sync auto-restart button
@@ -669,15 +675,26 @@ function addRewardPoint(episode, reward) {
 }
 
 // === Top Runs ===
+let displayLevel = 0;
+
 async function loadHistory() {
     try {
-        const res = await fetch("/api/history");
+        // Fetch current level
+        const lvlRes = await fetch("/api/levels");
+        const lvlData = await lvlRes.json();
+        displayLevel = lvlData.current;
+
+        // Fetch per-level history
+        const res = await fetch(`/api/level-history/${displayLevel}`);
         const data = await res.json();
         if (data.reward_history && data.reward_history.length > 0) {
             allRewards = data.reward_history;
             allSurvival = data.survival_history || [];
             allBoss = data.boss_history || [];
             lastSeenEpisode = data.reward_history.length;
+            updateChart();
+        } else {
+            allRewards = []; allSurvival = []; allBoss = [];
             updateChart();
         }
         if (data.top_runs) updateTopRuns(data.top_runs);
@@ -693,17 +710,16 @@ function updateTopRuns(runs) {
             <td>${i + 1}</td>
             <td>${run.episode.toLocaleString()}</td>
             <td>${run.reward.toFixed(1)}</td>
-            <td>${run.level}</td>
             <td>${run.duration}s</td>
         `;
         tbody.appendChild(tr);
     });
 }
 
-// Periodic full sync — chart + top runs every 2s
+// Periodic full sync — chart + top runs every 2s (per-level)
 setInterval(async () => {
     try {
-        const res = await fetch("/api/history");
+        const res = await fetch(`/api/level-history/${displayLevel}`);
         const data = await res.json();
         if (data.top_runs) updateTopRuns(data.top_runs);
         if (data.reward_history && data.reward_history.length > 0) {
@@ -721,38 +737,42 @@ async function togglePause() {
     const res = await fetch("/api/pause", { method: "POST" });
     const data = await res.json();
     const btn = $("#btn-pause");
-    if (data.paused) {
-        btn.textContent = "Resume";
-        btn.classList.add("active");
-    } else {
-        btn.textContent = "Pause";
-        btn.classList.remove("active");
-    }
+    btn.innerHTML = data.paused
+        ? '<i data-lucide="play" class="icon-btn"></i>'
+        : '<i data-lucide="pause" class="icon-btn"></i>';
+    btn.classList.toggle("active", data.paused);
+    lucide.createIcons();
 }
 
 async function restartGame() {
     await fetch("/api/restart", { method: "POST" });
-    $("#btn-restart").textContent = "Restarting...";
-    setTimeout(() => { $("#btn-restart").textContent = "Restart"; }, 1000);
+    const btnR = $("#btn-restart");
+    btnR.innerHTML = '<i data-lucide="loader" class="icon-btn spin"></i>';
+    lucide.createIcons();
+    setTimeout(() => { btnR.innerHTML = '<i data-lucide="rotate-ccw" class="icon-btn"></i>'; lucide.createIcons(); }, 1000);
 }
 
 async function saveCheckpoint() {
     await fetch("/api/save", { method: "POST" });
-    $("#btn-save").textContent = "Saving...";
-    setTimeout(() => { $("#btn-save").textContent = "Checkpoint"; }, 2000);
+    const btnS = $("#btn-save");
+    btnS.innerHTML = '<i data-lucide="loader" class="icon-btn spin"></i> Save Model';
+    lucide.createIcons();
+    setTimeout(() => { btnS.innerHTML = '<i data-lucide="hard-drive-download" class="icon-btn"></i> Save Model'; lucide.createIcons(); }, 2000);
 }
 
 async function playBestRun() {
-    $("#btn-replay").textContent = "Loading...";
-
+    const btn = $("#btn-replay");
+    btn.innerHTML = '<i data-lucide="loader" class="icon-btn spin"></i> Replay';
+    lucide.createIcons();
     const res = await fetch("/api/play-best", { method: "POST" });
     const data = await res.json();
     if (data.ok) {
         window.open(data.url, "_blank");
     } else {
-        alert(data.message || "No replay available");
+        alert(data.message || "No replay available for this level");
     }
-    $("#btn-replay").textContent = "Best Run";
+    btn.innerHTML = '<i data-lucide="play" class="icon-btn"></i> Replay';
+    lucide.createIcons();
 }
 
 async function toggleAutoRestart() {
@@ -1088,8 +1108,57 @@ document.addEventListener("keydown", (e) => {
     } else if (e.code === "ArrowRight") {
         e.preventDefault();
         fetch("/api/step", { method: "POST" });
+    } else if ((e.metaKey || e.ctrlKey) && e.key >= "1" && e.key <= "8") {
+        e.preventDefault();
+        fetch("/api/set-level", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({level: parseInt(e.key) - 1})
+        });
     }
 });
+
+const LEVEL_NAMES = ["Jungle","Base 1","Waterfall","Base 2","Snow Field","Energy Zone","Hangar","Alien's Lair"];
+
+// === Levels tab ===
+async function loadLevels() {
+    const el = $("#levels-list");
+    if (!el) return;
+    try {
+        const res = await fetch("/api/levels");
+        const data = await res.json();
+        const current = data.current;
+        let html = '';
+        for (let i = 0; i < 8; i++) {
+            const info = data.levels.find(l => l.level === i);
+            const active = i === current;
+            html += `<div class="stat-row" style="${active ? 'border-left:3px solid #4CAF50;padding-left:8px' : ''}">
+                <span class="stat-label">
+                    <strong style="color:${active ? '#4CAF50' : '#ccc'}">Level ${i + 1}: ${LEVEL_NAMES[i]}</strong>
+                    ${info ? `<span style="color:#555;margin-left:8px">${info.episodes} ep, avg ${info.avg_reward}, best ${info.best_reward}</span>` : '<span style="color:#555;margin-left:8px">no data</span>'}
+                </span>
+                <span>
+                    ${!active ? `<button onclick="setLevel(${i})" style="background:#12121a;color:#4CAF50;border:1px solid #1e1e2e;border-radius:4px;padding:4px 10px;font-size:11px;cursor:pointer">Switch</button>` : '<span style="color:#4CAF50;font-size:11px">Active</span>'}
+                </span>
+            </div>`;
+        }
+        el.innerHTML = html;
+    } catch (e) { /* ignore */ }
+}
+
+async function setLevel(level) {
+    const btns = document.querySelectorAll(`[onclick="setLevel(${level})"]`);
+    btns.forEach(b => { b.innerHTML = '<i data-lucide="loader" class="icon-btn spin"></i>'; b.disabled = true; });
+    lucide.createIcons();
+    await fetch("/api/set-level", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({level})
+    });
+    setTimeout(() => { loadLevels(); loadHistory(); }, 500);
+}
+
+setInterval(loadLevels, 3000);
 
 // === Init ===
 initChart();
@@ -1098,6 +1167,7 @@ connectFrameWS();
 connectStatsWS();
 loadHistory();
 loadConfig();
+loadLevels();
 // Fetch level data immediately (progress bar)
 fetch("/api/level").then(r => r.json()).then(d => {
     cachedDeaths = d.death_positions;

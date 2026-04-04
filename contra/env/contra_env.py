@@ -109,6 +109,8 @@ class ContraEnv(gym.Env):
         self._saved_game_state: np.ndarray | None = None
         self._saved_scroll: int = 0
         self._practice = False
+        self._start_level: int = 0  # 0 = level 1 (default)
+        self._level_states: dict[int, np.ndarray] = {}  # level_idx → NES save state
         self._prev_enemy_hp = [0] * 16  # track $578+slot for hit reward
         self._prev_weapon = 0
         self._reward_weapon = 0.0
@@ -127,7 +129,7 @@ class ContraEnv(gym.Env):
         self._initial_state: np.ndarray | None = None
         self._boot()
 
-    def _boot(self) -> None:
+    def _boot(self, level: int = 0) -> None:
         """Advance past title screen, select 1 PLAYER, save initial state."""
         self._nes.reset()
 
@@ -162,8 +164,11 @@ class ContraEnv(gym.Env):
         # Wait for game to fully load
         for _ in range(600):
             self._nes.step(1)
+            if level > 0:
+                self._nes[0x30] = level  # force level every frame
 
-        self._initial_state = self._nes.save()  # numpy array
+        if level == 0:
+            self._initial_state = self._nes.save()
 
     def request_restart(self) -> None:
         """Called from web UI — forces episode to end on next step."""
@@ -201,6 +206,11 @@ class ContraEnv(gym.Env):
         super().reset(seed=seed)
         if self._saved_game_state is not None:
             self._nes.load(self._saved_game_state)
+        elif self._start_level > 0 and self._start_level in self._level_states:
+            self._nes.load(self._level_states[self._start_level])
+        elif self._start_level > 0:
+            self._boot(level=self._start_level)
+            self._level_states[self._start_level] = self._nes.save()
         elif self._initial_state is not None:
             self._nes.load(self._initial_state)
         else:

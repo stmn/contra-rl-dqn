@@ -17,6 +17,10 @@
             <h1 data-tippy-content="AI agent learning to play Contra (NES, 1988) using Deep Q-Network reinforcement learning. The agent learns by trial and error — no human gameplay examples.">CONTRA RL</h1>
         </div>
         <div class="header-right">
+            <div class="header-stat" data-tippy-content="Current training level (Cmd+1-8 to switch)">
+                <i data-lucide="layers" class="icon-sm"></i>
+                L<span id="header-level">1</span>
+            </div>
             <div class="header-stat" data-tippy-content="Current training episode number">
                 <i data-lucide="hash" class="icon-sm"></i>
                 EP <span id="header-episode">0</span>
@@ -58,38 +62,38 @@
         <section class="stats-panel">
             <div class="controls-grid admin-only" style="display:none">
                 <div class="control-group">
-                    <button id="btn-pause" onclick="togglePause()" data-tippy-content="Pause or resume training.">
-                        <i data-lucide="pause" class="icon-btn"></i> Pause
+                    <button id="btn-pause" onclick="togglePause()" data-tippy-content="Pause / Resume (Space)">
+                        <i data-lucide="pause" class="icon-btn"></i>
                     </button>
-                    <button id="btn-auto-restart" onclick="toggleAutoRestart()" class="active" data-tippy-content="Auto-restart after game over. Disable to freeze and inspect Run Log.">
-                        <i data-lucide="repeat" class="icon-btn"></i> Loop
+                    <button id="btn-auto-restart" onclick="toggleAutoRestart()" class="active" data-tippy-content="Loop: auto-restart after game over">
+                        <i data-lucide="repeat" class="icon-btn"></i>
                     </button>
-                    <button id="btn-restart" onclick="restartGame()" data-tippy-content="Force episode end, start new game.">
-                        <i data-lucide="rotate-ccw" class="icon-btn"></i> Reset
+                    <button id="btn-restart" onclick="restartGame()" data-tippy-content="Reset: force new episode">
+                        <i data-lucide="rotate-ccw" class="icon-btn"></i>
                     </button>
                 </div>
                 <div class="control-group">
                     <button id="btn-save" onclick="saveCheckpoint()" data-tippy-content="Save neural network weights to disk.">
-                        <i data-lucide="hard-drive-download" class="icon-btn"></i> Checkpoint
+                        <i data-lucide="hard-drive-download" class="icon-btn"></i> Save Model
                     </button>
                     <button id="btn-replay" onclick="playBestRun()" data-tippy-content="Watch recording of the best run.">
-                        <i data-lucide="play" class="icon-btn"></i> Best Run
+                        <i data-lucide="play" class="icon-btn"></i> Replay
                     </button>
                 </div>
                 <div class="control-group">
-                    <button id="btn-save-state" onclick="saveGameState()" data-tippy-content="Save game moment. Agent respawns here after death (practice mode).">
-                        <i data-lucide="bookmark-plus" class="icon-btn"></i> Practice
+                    <button id="btn-save-state" onclick="saveGameState()" data-tippy-content="Save game state. Agent respawns here after death.">
+                        <i data-lucide="bookmark-plus" class="icon-btn"></i> Save State
                     </button>
-                    <button id="btn-clear-state" onclick="clearGameState()" style="display:none" data-tippy-content="Exit practice mode, back to normal training.">
-                        <i data-lucide="bookmark-x" class="icon-btn"></i> End Practice
+                    <button id="btn-clear-state" onclick="clearGameState()" style="display:none" data-tippy-content="Clear saved state, back to normal training.">
+                        <i data-lucide="bookmark-x" class="icon-btn"></i> Clear State
                     </button>
                 </div>
             </div>
             <div class="tabs">
-                <button class="tab active" data-tab="training"><i data-lucide="cpu" class="icon-btn"></i> Training</button>
-                <button class="tab" data-tab="top-runs"><i data-lucide="trophy" class="icon-btn"></i> Top Runs</button>
-                <button class="tab" data-tab="agent-output"><i data-lucide="activity" class="icon-btn"></i> Actions</button>
-                <button class="tab" data-tab="run-log"><i data-lucide="scroll-text" class="icon-btn"></i> Run Log</button>
+                <button class="tab active" data-tab="training"><i data-lucide="cpu" class="icon-btn"></i> Overview</button>
+                <button class="tab" data-tab="run-log"><i data-lucide="scroll-text" class="icon-btn"></i> Live</button>
+                <button class="tab" data-tab="top-runs"><i data-lucide="trophy" class="icon-btn"></i> Leaderboard</button>
+                <button class="tab" data-tab="levels"><i data-lucide="layers" class="icon-btn"></i> Levels</button>
                 <button class="tab" data-tab="config"><i data-lucide="settings" class="icon-btn"></i> Config</button>
             </div>
 
@@ -141,7 +145,6 @@
                             <th>#</th>
                             <th data-tippy-content="Which training episode this run happened in.">Episode</th>
                             <th data-tippy-content="Total reward earned — mainly from scrolling the map forward. Higher = further progress.">Reward</th>
-                            <th data-tippy-content="Furthest level (stage) reached in this run.">Level</th>
                             <th data-tippy-content="How long the agent survived (in seconds of game time).">Time</th>
                         </tr>
                     </thead>
@@ -150,12 +153,6 @@
             </div>
             </div>
 
-            <div class="tab-content" id="tab-agent-output">
-            <div class="stat-group">
-                <h2><i data-lucide="activity" class="icon-heading"></i> Action Usage <span data-tippy-content="How often the agent picks each button combo. A healthy agent uses many different actions. Over-reliance on one action may indicate a stuck policy." class="tip-left" style="font-weight:400;font-size:10px;cursor:help;color:#555">(?)</span></h2>
-                <div id="action-bars"></div>
-            </div>
-            </div>
 
 
             <div class="tab-content" id="tab-run-log">
@@ -164,6 +161,7 @@
                     <button class="subtab" data-subtab="events" onclick="switchSubTab(this)">Events</button>
                     <button class="subtab" data-subtab="agent-view" onclick="switchSubTab(this)">Agent View</button>
                     <button class="subtab" data-subtab="features" onclick="switchSubTab(this)">Features</button>
+                    <button class="subtab" data-subtab="actions" onclick="switchSubTab(this)">Actions</button>
                 </div>
                 <div class="subtab-body">
                     <div class="subtab-content active" id="subtab-rewards">
@@ -180,7 +178,20 @@
                             <div class="features-grid" id="features-grid"></div>
                         </div>
                     </div>
+                    <div class="subtab-content" id="subtab-actions">
+                        <div id="action-bars"></div>
+                    </div>
                 </div>
+            </div>
+
+            <div class="tab-content" id="tab-levels">
+            <div class="stat-group">
+                <h2><i data-lucide="layers" class="icon-heading"></i> Levels</h2>
+                <div id="levels-list"></div>
+                <div style="margin-top:12px;color:#555;font-size:11px">
+                    Keyboard: <strong>Cmd+1</strong> to <strong>Cmd+8</strong> (Mac) or <strong>Ctrl+1</strong> to <strong>Ctrl+8</strong> (Win/Linux) to switch levels. Each level has its own model and statistics.
+                </div>
+            </div>
             </div>
 
             <div class="tab-content" id="tab-config">
