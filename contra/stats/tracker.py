@@ -82,8 +82,26 @@ class StatsTracker:
         self._last_rollback_time: float = 0.0
         self._last_autosave_time: float = 0.0
         self._top_runs: list[EpisodeRecord] = []
+        self._current_level: int = 0
+        self._level_stats: dict[int, dict] = {}  # per-level: reward_history, top_runs, boss_history
 
         self.load()
+
+    def _get_level_stats(self, level: int) -> dict:
+        if level not in self._level_stats:
+            self._level_stats[level] = {
+                "reward_history": [],
+                "survival_history": [],
+                "boss_history": [],
+                "top_runs": [],
+                "episode": 0,
+                "best_reward": 0.0,
+            }
+        return self._level_stats[level]
+
+    def set_current_level(self, level: int) -> None:
+        with self._lock:
+            self._current_level = level
 
     def on_episode_end(self, reward: float, level: int, deaths: int, info: dict | None = None) -> None:
         with self._lock:
@@ -96,6 +114,10 @@ class StatsTracker:
             if reward > self._best_reward:
                 self._best_reward = reward
                 self._best_reward_time = time.time()
+            # Per-level best reward time
+            ls_ref = self._get_level_stats(self._current_level)
+            if reward > ls_ref.get("best_reward", 0):
+                ls_ref["best_reward_time"] = time.time()
             if level > self._best_level:
                 self._best_level = level
 
@@ -125,6 +147,19 @@ class StatsTracker:
                 self._survival_history = self._survival_history[-5_000:]
                 self._boss_history = self._boss_history[-5_000:]
 
+            # Per-level stats
+            ls = self._get_level_stats(self._current_level)
+            ls["episode"] += 1
+            ls["reward_history"].append(reward)
+            ls["survival_history"].append(ep_steps)
+            ls["boss_history"].append(reached_boss)
+            if reward > ls["best_reward"]:
+                ls["best_reward"] = reward
+            if len(ls["reward_history"]) > 5_000:
+                ls["reward_history"] = ls["reward_history"][-2_500:]
+                ls["survival_history"] = ls["survival_history"][-2_500:]
+                ls["boss_history"] = ls["boss_history"][-2_500:]
+
             record = EpisodeRecord(
                 episode=self._episode,
                 reward=reward,
@@ -136,6 +171,10 @@ class StatsTracker:
             self._top_runs.append(record)
             self._top_runs.sort(key=lambda r: r.reward, reverse=True)
             self._top_runs = self._top_runs[:20]
+            # Per-level top runs
+            ls["top_runs"].append({"episode": ls["episode"], "reward": reward, "level": level, "duration": round(ep_steps / 15, 1)})
+            ls["top_runs"].sort(key=lambda r: r["reward"], reverse=True)
+            ls["top_runs"] = ls["top_runs"][:10]
 
     def update_step(self, timesteps: int, fps: float) -> None:
         with self._lock:
@@ -171,9 +210,11 @@ class StatsTracker:
 
     def time_since_pb(self) -> float:
         with self._lock:
-            if self._best_reward_time == 0:
+            ls = self._get_level_stats(self._current_level)
+            t = ls.get("best_reward_time", 0)
+            if t == 0:
                 return 0.0
-            return time.time() - self._best_reward_time
+            return time.time() - t
 
     def on_rollback(self, count: int) -> None:
         with self._lock:
@@ -201,6 +242,31 @@ class StatsTracker:
         with self._lock:
             return self._survival_history[-last_n:]
 
+    def level_history(self, level: int) -> dict:
+        with self._lock:
+            ls = self._get_level_stats(level)
+            return {
+                "reward_history": ls["reward_history"][-5000:],
+                "survival_history": ls["survival_history"][-5000:],
+                "boss_history": ls["boss_history"][-5000:],
+                "top_runs": ls["top_runs"][:10],
+                "episode": ls["episode"],
+                "best_reward": ls["best_reward"],
+            }
+
+    def levels_summary(self) -> list[dict]:
+        with self._lock:
+            result = []
+            for lvl in sorted(self._level_stats.keys()):
+                ls = self._level_stats[lvl]
+                result.append({
+                    "level": lvl,
+                    "episodes": ls["episode"],
+                    "best_reward": round(ls["best_reward"], 0),
+                    "avg_reward": round(sum(ls["reward_history"][-50:]) / max(len(ls["reward_history"][-50:]), 1), 0),
+                })
+            return result
+
     def boss_history(self, last_n: int = 1000) -> list[bool]:
         with self._lock:
             return self._boss_history[-last_n:]
@@ -225,6 +291,7 @@ class StatsTracker:
                 "reward_history": self._reward_history[-5_000:],
                 "survival_history": self._survival_history[-5_000:],
                 "boss_history": self._boss_history[-5_000:],
+                "level_stats": {str(k): v for k, v in self._level_stats.items()},
                 "episode_length": self._episode_length,
                 "top_runs": [
                     {"episode": r.episode, "reward": r.reward, "level": r.level, "deaths": r.deaths, "timestamp": r.timestamp, "steps": r.steps}
@@ -252,6 +319,7 @@ class StatsTracker:
             self._reward_history = data.get("reward_history", [])
             self._survival_history = data.get("survival_history", [])
             self._boss_history = data.get("boss_history", [])
+            self._level_stats = {int(k): v for k, v in data.get("level_stats", {}).items()}
             self._episode_length = data.get("episode_length", 600)
             self._top_runs = [
                 EpisodeRecord(

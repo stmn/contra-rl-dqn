@@ -52,6 +52,7 @@ class TrainingControls:
         self.auto_restart = True
         self.waiting_restart = False
         self.step_once = False
+        self.set_level: int = -1  # -1 = no change, 0-7 = switch level
         self.episode_length = 18_000  # 10 min safety net
         self.num_envs = 8
 
@@ -223,6 +224,35 @@ async def step_once(request: Request):
     return JSONResponse({"ok": False}, status_code=503)
 
 
+@app.post("/api/set-level")
+async def set_level(request: Request, data: dict):
+    if not _is_local(request):
+        return JSONResponse({"ok": False}, status_code=403)
+    if _controls:
+        level = int(data.get("level", 0))
+        if 0 <= level <= 7:
+            _controls.set_level = level
+            return {"ok": True, "level": level}
+    return JSONResponse({"ok": False}, status_code=503)
+
+
+@app.get("/api/levels")
+async def get_levels():
+    if not _tracker:
+        return {"levels": [], "current": 0}
+    return {
+        "levels": _tracker.levels_summary(),
+        "current": _frame_buffer.current_level if _frame_buffer else 0,
+    }
+
+
+@app.get("/api/level-history/{level}")
+async def get_level_history(level: int):
+    if not _tracker:
+        return {}
+    return _tracker.level_history(level)
+
+
 @app.post("/api/auto-restart")
 async def toggle_auto_restart(request: Request):
     if not _is_local(request):
@@ -276,14 +306,14 @@ async def get_best_replay():
 
 @app.post("/api/play-best")
 async def play_best_run():
-    """Return URL to pre-recorded best run video."""
-    video_path = STATIC_DIR / "best_run.mp4"
+    """Return URL to pre-recorded best run video for current level."""
+    level = _frame_buffer.current_level if _frame_buffer else 0
+    video_path = STATIC_DIR / f"best_run_L{level}.mp4"
     if not video_path.exists():
-        return JSONResponse({"ok": False, "message": "No best run recorded yet"}, status_code=404)
-    # Add timestamp to bust cache
+        return JSONResponse({"ok": False, "message": f"No best run recorded for Level {level + 1}"}, status_code=404)
     import os
     mtime = int(os.path.getmtime(video_path))
-    return {"ok": True, "url": f"/static/best_run.mp4?t={mtime}"}
+    return {"ok": True, "url": f"/static/best_run_L{level}.mp4?t={mtime}"}
 
 
 @app.post("/api/settings")
@@ -382,6 +412,7 @@ async def ws_stats(ws: WebSocket):
                     d["features"] = _frame_buffer.env0_features
                     d["action_counts"] = _frame_buffer.action_counts
                     d["run_log"] = _frame_buffer.env0_run_log
+                    d["current_level"] = _frame_buffer.current_level
                     if _controls and _controls.practice_mode:
                         d["practice_rewards"] = _frame_buffer.practice_rewards[-200:]
                     d["buffer_size"] = _frame_buffer.buffer_size if hasattr(_frame_buffer, 'buffer_size') else 0
