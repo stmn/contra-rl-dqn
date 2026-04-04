@@ -27,6 +27,11 @@ class Settings(BaseSettings):
     hybrid_observation: bool = True    # RAM features alongside pixels
     prioritised_replay: bool = True    # PER: surprise-weighted sampling
     overlay_sprites: bool = True       # Draw enemy/bullet markers on frames
+    dueling_dqn: bool = True           # Separate V(state) + A(action) streams
+    noisy_nets: bool = True            # Noisy linear layers instead of epsilon-greedy
+    n_step_returns: int = 3            # N-step returns (1 = standard, 3 = recommended)
+    huber_loss: bool = True            # Huber loss instead of MSE (robust to outliers)
+    gradient_clip: float = 10.0        # Max gradient norm (0 = disabled)
 
 
 settings = Settings()
