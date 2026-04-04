@@ -96,6 +96,12 @@ brew install fceux
 
 FCEUX sends screen pixels + RAM to Python. The agent applies overlay and runs inference. NES 2C02 palette matched between emulators.
 
+**Note**: The agent plays worse in FCEUX than in training because:
+- **Input latency** — file-based communication adds ~2 frame delay. In Contra, 2 frames decide between dodging a bullet and dying.
+- **Q-value spread** — early models have nearly identical Q-values for different actions (~0.3 difference on ~980 base). Small pixel differences from FCEUX palette flip the action choice.
+
+The web dashboard shows the true agent performance.
+
 ## Quick Start
 
 ```bash
