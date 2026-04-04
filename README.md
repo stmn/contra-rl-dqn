@@ -1,8 +1,8 @@
-# Contra RL Deep Q-Network
+# Contra RL — Rainbow DQN
 
-A [reinforcement learning](https://en.wikipedia.org/wiki/Reinforcement_learning) agent that learns to play **[Contra](https://en.wikipedia.org/wiki/Contra_(video_game))** (NES, 1988) from raw pixels, using [Deep Q-Network](https://en.wikipedia.org/wiki/Q-learning#Deep_Q-learning) with [experience replay](https://en.wikipedia.org/wiki/Experience_replay). The agent watches the game screen, decides which buttons to press, and improves through thousands of attempts.
+An AI agent learning to play **[Contra](https://en.wikipedia.org/wiki/Contra_(video_game))** (NES, 1988) using [Rainbow DQN](https://arxiv.org/abs/1710.02298) — combining 5 extensions of Deep Q-Network. The agent sees the game screen + RAM features, decides which buttons to press, and improves through thousands of attempts.
 
-Built from scratch with [Claude Code](https://claude.ai/code) (Opus 4.6), just for fun.
+Built from scratch with [Claude Code](https://claude.ai/code), just for fun.
 
 ![Dashboard](docs/dashboard.gif)
 
@@ -12,118 +12,103 @@ Built from scratch with [Claude Code](https://claude.ai/code) (Opus 4.6), just f
 - **Sees**: 128x128 grayscale game frame with sprite overlays + 28 RAM features (4 [stacked frames](https://danieltakeshi.github.io/2016/11/25/frame-skipping-and-preprocessing-for-deep-q-networks-on-atari-2600-games/) for motion detection)
 - **Decides**: Which of 16 button combinations to press (right, jump, shoot, combinations)
 - **Learns from**: Scroll progress, enemy kills, turret/boss damage, weapon upgrades, death penalties
-- **Algorithm**: DQN with Double DQN, Prioritised Experience Replay (PER), 200K replay buffer
+
+### Algorithm — Rainbow DQN (5/6)
+
+| Extension | Description | Flag |
+|-----------|------------|------|
+| **Double DQN** | Online network selects action, target evaluates — reduces overestimation | always on |
+| **Prioritised Replay (PER)** | Sample surprising transitions more often | `PRIORITISED_REPLAY` |
+| **Dueling DQN** | Separate V(state) + A(action) streams — learn state value independently | `DUELING_DQN` |
+| **Noisy Nets** | Learnable noise in weights — exploration without epsilon-greedy | `NOISY_NETS` |
+| **N-step Returns** | Multi-step reward bootstrapping — faster credit assignment | `N_STEP_RETURNS` |
+
+Plus: Huber loss (robust to outliers), gradient clipping, hybrid observation (pixels + RAM features).
 
 ### Sprite Overlay
-Enemy positions and bullets are read directly from NES RAM and drawn onto the game frame as shape markers (14 enemy types from [ROM disassembly](https://github.com/vermiceli/nes-contra-us)):
+Enemy positions and bullets read from NES RAM and drawn as shape markers (14 enemy types from [ROM disassembly](https://github.com/vermiceli/nes-contra-us)):
 
 - **Rectangles** — soldiers (running man, sniper, scuba diver, turret man)
-- **Triangles** — turrets (rotating gun, red turret, wall cannon, boss bomb turret)
+- **Triangles** — turrets (rotating gun, red turret, wall cannon, boss turret)
 - **Circles** — projectiles (enemy bullets, mortar shots)
 - **Diamonds** — pickups (weapon box, flying capsule) and boss door
 
 ### Reward System
 | Signal | Value | Purpose |
 |--------|-------|---------|
-| Screen scroll | `scroll_delta * 0.08 * speed_bonus` | Progress through the level |
+| Screen scroll | `scroll_delta * 1.6 * speed_bonus` | Progress through the level |
 | Enemy kill | `score_delta * 15` | Incentivize shooting |
 | Turret/boss hit | `+50 per hit` | Reward damaging multi-HP enemies |
 | Weapon upgrade | `+100 per strength level` | Pick up better weapons (Spread = +300) |
 | Death | `-500` | Avoid enemies and bullets |
-| Standing still (>0.7s) | `-0.5 / step` | Don't idle |
 
-### Training Progress
+### Per-Level Models
+Each level has its own model, replay buffer, and statistics. Switch levels with `Cmd/Ctrl+1-8`. Level names from ROM:
 
-![Reward History](docs/reward_history.png)
-
-### Why DQN over PPO?
-We started with [PPO](https://arxiv.org/abs/1707.06347) but it suffered from **[catastrophic forgetting](https://en.wikipedia.org/wiki/Catastrophic_interference)** — the agent would learn to play well, then suddenly "forget" everything and stand still. DQN's replay buffer stores 200K past experiences and learns from them repeatedly. A rare successful dodge is seen hundreds of times during training, not just once.
+| Key | Level |
+|-----|-------|
+| 1 | Jungle |
+| 2 | Base 1 |
+| 3 | Waterfall |
+| 4 | Base 2 |
+| 5 | Snow Field |
+| 6 | Energy Zone |
+| 7 | Hangar |
+| 8 | Alien's Lair |
 
 ### Stability
-- **Auto-rollback**: If average reward drops 50% from peak, loads the best checkpoint
-- **Auto-save**: Stats saved every 50 episodes, best model saved on new peak
-- **Manual Save**: Dashboard button to checkpoint when agent plays well
+- **Auto-rollback**: If average reward drops 50% from peak, loads the best checkpoint (per level)
+- **Auto-save**: Best model saved on new peak (per level)
+- **Practice mode**: Save/load game state for targeted training on specific sections
 
 ## Tech Stack
 
 | Component | Technology |
 |-----------|-----------|
 | NES Emulator | [cynes](https://github.com/Youlixx/cynes) (Rust, ARM64 + x86_64) |
-| RL Algorithm | DQN + Double DQN + PER ([PyTorch](https://pytorch.org)) |
+| RL Algorithm | Rainbow DQN ([PyTorch](https://pytorch.org)) |
 | GPU | Apple Silicon [MPS](https://developer.apple.com/metal/) / NVIDIA [CUDA](https://developer.nvidia.com/cuda-toolkit) / CPU |
-| Dashboard | [FastAPI](https://fastapi.tiangolo.com) + WebSocket + [Chart.js](https://www.chartjs.org) + [Lucide](https://lucide.dev) icons |
-| Video Replay | [FFmpeg](https://ffmpeg.org) (H.264) |
+| Dashboard | [FastAPI](https://fastapi.tiangolo.com) + WebSocket + [Chart.js](https://www.chartjs.org) + [Tippy.js](https://atomiks.github.io/tippyjs/) |
+| ROM Analysis | [Contra NES Disassembly](https://github.com/vermiceli/nes-contra-us) |
 
 ## Dashboard
 
-Real-time web dashboard for monitoring training:
+Real-time web dashboard at **http://localhost:41918**:
 
-- **Live game preview** at ~45fps with agent view overlay in corner
-- **Reward history chart** with configurable rolling average + survival time
-- **Level progress bar** with death heatmap
-- **Top runs table** with reward, level, and duration
-- **Config tab** with all hyperparameters and feature flags
-- **Run Log** with sub-tabs: Rewards breakdown, Events feed, Agent View (visible enemies/bullets/weapon), Features
-- **Controls** (admin only): Pause (spacebar), Loop, Reset, Checkpoint, Best Run, Practice, step-by-step (arrow right)
+- **Live game preview** — click to swap main/agent view
+- **Overview** — episodes, timesteps, FPS, buffer, RAM usage
+- **Live tab** — rewards breakdown, events feed, agent view (enemies/bullets/weapon), features, actions
+- **Leaderboard** — top runs per level
+- **Levels** — switch levels, per-level stats
+- **Config** — all hyperparameters with tooltips
+- **Reward History** — chart with toggleable datasets (reward, boss reach %), crosshair on hover
+- **Level Progress** — death heatmap, practice marker, PB line
+- **Keyboard**: Space (pause), Arrow Right (step), Cmd/Ctrl+1-8 (switch level)
 
-## Watch Mode (FCEUX with Audio)
+## Watch Mode (FCEUX)
 
-Watch the agent play with real NES audio using [FCEUX](https://fceux.com):
+Watch the agent play with real NES audio:
 
 ```bash
 brew install fceux
 ./scripts/watch.sh
-# Select 1 Player in the FCEUX window — agent takes over
 ```
 
-FCEUX sends screen pixels + RAM to Python via file bridge. Python runs the model and sends actions back. The agent receives the same overlay and features as during training.
-
-**Note**: The agent plays slightly worse in FCEUX than in training due to:
-- ~2 frame input latency (file I/O)
-- Minor pixel differences between emulators (cynes vs FCEUX palette)
-- Early models have very close Q-values, making them sensitive to small input changes
-
-The web dashboard shows the true agent performance.
-
-## Practice Mode
-
-Save/Load NES game state for targeted training on specific sections:
-
-- **Save State** — saves current game moment; agent respawns here after every death
-- **Clear State** — removes saved state, back to normal training
-- Stats are not recorded during practice (marked as PRACTICE in dashboard)
-- Model is auto-saved before practice starts (`pre_practice.pt`) as safety net
-
-Useful for training on boss fights or difficult sections without playing through the entire level each time.
+FCEUX sends screen pixels + RAM to Python. The agent applies overlay and runs inference. NES 2C02 palette matched between emulators.
 
 ## Quick Start
 
-### Prerequisites
-- Python 3.10+
-- Legally obtained Contra NES ROM
-
-### Setup
 ```bash
 python3.11 -m venv .venv
 source .venv/bin/activate
 pip install -e .
 
-# Place your ROM
 cp /path/to/contra.nes roms/contra.nes
+cp .env.example .env  # edit DEVICE=mps for Apple Silicon
+
+./start-fresh.sh      # fresh training
+./start.sh            # resume from checkpoint
 ```
-
-### Training
-```bash
-# Fresh start
-./start-fresh.sh
-
-# Resume from last checkpoint
-./start.sh
-```
-
-Dashboard: **http://localhost:41918**
-
-For GPU acceleration on Apple Silicon, set `DEVICE=mps`. For NVIDIA: `DEVICE=cuda`.
 
 ## Project Structure
 
@@ -131,56 +116,53 @@ For GPU acceleration on Apple Silicon, set `DEVICE=mps`. For NVIDIA: `DEVICE=cud
 contra-rl-dqn/
 ├── contra/
 │   ├── env/
-│   │   ├── contra_env.py     # NES environment, reward, death detection, sprite overlay
-│   │   └── wrappers.py       # Grayscale, resize 128x128, frame stack, stream capture
+│   │   ├── contra_env.py     # NES environment, reward, sprite overlay, level switching
+│   │   └── wrappers.py       # Grayscale, resize, frame stack, stream capture
 │   ├── training/
-│   │   ├── dqn.py            # DQN + Double DQN + PER, auto-rollback
-│   │   └── callbacks.py      # Frame buffer, best run recording
+│   │   ├── dqn.py            # Rainbow DQN: Dueling, Noisy, N-step, PER, Double
+│   │   └── callbacks.py      # Frame buffer, per-level best run recording
 │   ├── web/
-│   │   ├── server.py         # FastAPI dashboard, dual WebSocket (frames + stats)
-│   │   └── static/           # HTML, CSS, JS
+│   │   ├── server.py         # FastAPI dashboard, WebSocket, level/model APIs
+│   │   └── static/           # HTML, CSS, JS (Tippy.js tooltips, Chart.js)
 │   └── stats/
-│       └── tracker.py        # Episode stats, persistence, death heatmap
-├── config/
-│   └── settings.py           # Training hyperparameters
+│       └── tracker.py        # Per-level stats, persistence, death heatmap
+├── config/settings.py        # All settings with feature flags
 ├── scripts/
 │   ├── run.py                # Main entry point
-│   ├── watch.py              # FCEUX watch mode (agent + audio)
+│   ├── watch.py              # FCEUX watch mode
 │   ├── watch.sh              # One-command launcher
-│   ├── fceux_agent.lua       # FCEUX Lua bridge script
-│   └── ram_monitor.py        # RAM debugging tool (play in FCEUX, monitor changes)
+│   ├── fceux_agent.lua       # FCEUX Lua bridge
+│   └── ram_monitor.py        # RAM debugging (play in FCEUX, monitor changes)
+├── docs/                     # Plans, narration script
 ├── roms/                     # ROM + NES palette (gitignored)
-├── checkpoints/              # Model checkpoints (gitignored)
-└── start.sh / start-fresh.sh # Launch scripts
+└── checkpoints/              # Model checkpoints per level (gitignored)
 ```
 
-## RAM Addresses (Contra NES)
+## RAM Addresses
 
-Discovered through RAM scanning with cynes and verified against [ROM disassembly](https://github.com/vermiceli/nes-contra-us) (see also: [Data Crystal](https://datacrystal.tcrf.net/wiki/Contra_(NES)/RAM_map)):
+Verified against [ROM disassembly](https://github.com/vermiceli/nes-contra-us) and [Data Crystal](https://datacrystal.tcrf.net/wiki/Contra_(NES)/RAM_map):
 
-| Address | Purpose | Notes |
-|---------|---------|-------|
+| Address | Name | Notes |
+|---------|------|-------|
+| `$64` | `LEVEL_SCREEN_NUMBER` | Camera screen index |
+| `$65` | `LEVEL_SCREEN_SCROLL_OFFSET` | Pixels within screen |
 | `$90` | Player state | 0=respawn, 1=alive, 2=dead |
-| `$60` | Scroll coarse | Camera position (tiles) |
-| `$65` | Scroll fine | Camera sub-tile offset |
-| `$30` | Current level | 0-7 = stage 1-8 |
-| `$7E2` | Player 1 score | Kill counter |
+| `$30` | `CURRENT_LEVEL` | 0-7 (Jungle to Alien's Lair) |
+| `$32` | `P1_NUM_LIVES` | 0 = last life |
+| `$84` | `BOSS_AUTO_SCROLL_COMPLETE` | 1 = boss revealed |
+| `$AA` | `P1_CURRENT_WEAPON` | 0=R, 1=M, 2=F, 3=S, 4=L, 5=B |
+| `$AE` | Invincibility timer | 127→0 after respawn |
 | `$334` | Player X | Screen position |
 | `$31A` | Player Y | Screen position |
-| `$33E-$347` | Enemy X positions | 16 slots |
-| `$324-$32D` | Enemy Y positions | 16 slots |
-| `$528` | Enemy types | 16 slots ([full list](https://github.com/vermiceli/nes-contra-us/blob/main/src/bank7.asm#L9161)) |
-| `$578` | Enemy HP | 16 slots, boss door=32, bomb turret=16 |
-| `$580` | Turret HP | 16 slots, counts DOWN per hit (turret: 7→0 = destroyed) |
-| `$504` | Turret rotation | 8 directions (0/32/64/96/128/160/192/224) |
-| `$508` | Enemy X velocity | For static vs moving detection |
-| `$AA` | Player weapon | Low 3 bits: 0=R, 1=M, 2=F, 3=S, 4=L, 5=B |
-| `$AE` | Invincibility timer | 127→0 countdown after respawn |
-| `$4B8` | Enemy routine | Per slot, 0=dead |
-| `$5A8` | Enemy attributes | For weapon items: weapon code inside |
+| `$528` | `ENEMY_TYPE` | 16 slots ([full list](https://github.com/vermiceli/nes-contra-us/blob/main/src/bank7.asm#L9161)) |
+| `$578` | `ENEMY_HP` | Boss door=32, turrets=8 |
+| `$4B8` | `ENEMY_ROUTINE` | 0=dead |
+| `$33E` | `ENEMY_X_POS` | 16 slots |
+| `$324` | `ENEMY_Y_POS` | 16 slots |
+| `$508` | `ENEMY_X_VELOCITY_FAST` | Movement direction |
+| `$5A8` | `ENEMY_ATTRIBUTES` | Weapon code for items |
 
-**Important**: cynes uses reversed bit order for controller input (`NES_INPUT_RIGHT=1`, `NES_INPUT_A=128`).
-
+cynes uses reversed bit order: `NES_INPUT_RIGHT=1`, `NES_INPUT_A=128`.
 
 ## License
 
