@@ -31,11 +31,21 @@ class SharedFrameBuffer:
         self._active_env: int = 0
         self.env0_episode: int = 0
         self.env0_scroll: int = 0
+        self.env0_features: list[float] = []
+        self.env0_run_log: dict = {}
+        self.agent_view: np.ndarray | None = None
+        self.buffer_size: int = 0
+        self.buffer_capacity: int = 0
+        self.practice_rewards: list[float] = []
+        self.practice_scroll: int = 0
+        self.current_level: int = 0
+        self.action_counts: list[int] = [0] * 16
         self.tracker = None
         self._env_frame_buffers: list[list] = [[] for _ in range(num_envs)]  # raw frames for replay
         self._best_reward: float = float("-inf")
+        self._level_best_rewards: dict[int, float] = {}
 
-    def write_env(self, env_id: int, frame: np.ndarray, scroll: int = 0, raw_frame=None) -> None:
+    def write_env(self, env_id: int, frame: np.ndarray, scroll: int = 0, raw_frame=None, features=None) -> None:
         """Write frame for a specific env. Only copies frame data for active env."""
         self._scrolls[env_id] = scroll
         # Record RAW frames for replay (without overlay)
@@ -46,6 +56,8 @@ class SharedFrameBuffer:
                 self._frame = frame.copy()
                 self._raw_frame = raw_frame.copy() if raw_frame is not None else frame.copy()
                 self.env0_scroll = scroll
+                if features is not None:
+                    self.env0_features = features.tolist()
 
     def set_active(self, env_id: int) -> None:
         self._active_env = env_id
@@ -57,18 +69,23 @@ class SharedFrameBuffer:
             return self._frame.copy() if self._frame is not None else None
 
     def on_episode_done(self, env_id: int, reward: float) -> None:
-        """Called when an env finishes. Saves video if new best."""
+        """Called when an env finishes. Saves video if new best for current level."""
         frames = self._env_frame_buffers[env_id]
+        level = self.current_level
+        level_best = self._level_best_rewards.get(level, float("-inf"))
+        if reward > level_best and len(frames) > 10:
+            self._level_best_rewards[level] = reward
+            self._save_best_video(frames, level)
+        # Also track global best
         if reward > self._best_reward and len(frames) > 10:
             self._best_reward = reward
-            self._save_best_video(frames)
         self._env_frame_buffers[env_id] = []
 
-    def _save_best_video(self, frames: list) -> None:
+    def _save_best_video(self, frames: list, level: int = 0) -> None:
         """Encode frames to MP4 in background."""
         import subprocess, cv2, threading
         from pathlib import Path
-        video_path = Path("contra/web/static/best_run.mp4")
+        video_path = Path(f"contra/web/static/best_run_L{level}.mp4")
         video_path.parent.mkdir(parents=True, exist_ok=True)
 
         def _encode():

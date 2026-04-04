@@ -9,26 +9,27 @@ Built from scratch with [Claude Code](https://claude.ai/code) (Opus 4.6), just f
 ## How It Works
 
 ### The Agent
-- **Sees**: 128x128 grayscale game frame with sprite overlays (4 [stacked frames](https://danieltakeshi.github.io/2016/11/25/frame-skipping-and-preprocessing-for-deep-q-networks-on-atari-2600-games/) for motion detection)
+- **Sees**: 128x128 grayscale game frame with sprite overlays + 28 RAM features (4 [stacked frames](https://danieltakeshi.github.io/2016/11/25/frame-skipping-and-preprocessing-for-deep-q-networks-on-atari-2600-games/) for motion detection)
 - **Decides**: Which of 16 button combinations to press (right, jump, shoot, combinations)
-- **Learns from**: Scroll progress, enemy kills, and death penalties
-- **Algorithm**: DQN with 100K experience replay buffer
+- **Learns from**: Scroll progress, enemy kills, turret/boss damage, weapon upgrades, death penalties
+- **Algorithm**: DQN with Double DQN, Prioritised Experience Replay (PER), 200K replay buffer
 
 ### Sprite Overlay
-Enemy positions and bullets are read directly from NES RAM and drawn onto the game frame as visual markers.
+Enemy positions and bullets are read directly from NES RAM and drawn onto the game frame as shape markers (14 enemy types from [ROM disassembly](https://github.com/vermiceli/nes-contra-us)):
 
-- **White rectangles** — moving enemies (soldiers, runners)
-- **White dots** — enemy projectiles
-- **Gray rectangle** — player character
-- **Light gray dots** — player bullets
-- Static enemies (turrets) are not marked — they're part of the level layout and the agent learns their positions through repetition.
+- **Rectangles** — soldiers (running man, sniper, scuba diver, turret man)
+- **Triangles** — turrets (rotating gun, red turret, wall cannon, boss bomb turret)
+- **Circles** — projectiles (enemy bullets, mortar shots)
+- **Diamonds** — pickups (weapon box, flying capsule) and boss door
 
 ### Reward System
 | Signal | Value | Purpose |
 |--------|-------|---------|
 | Screen scroll | `scroll_delta * 0.08 * speed_bonus` | Progress through the level |
 | Enemy kill | `score_delta * 15` | Incentivize shooting |
-| Death | `-100` | Avoid enemies and bullets |
+| Turret/boss hit | `+50 per hit` | Reward damaging multi-HP enemies |
+| Weapon upgrade | `+100 per strength level` | Pick up better weapons (Spread = +300) |
+| Death | `-500` | Avoid enemies and bullets |
 | Standing still (>0.7s) | `-0.5 / step` | Don't idle |
 
 ### Training Progress
@@ -36,7 +37,7 @@ Enemy positions and bullets are read directly from NES RAM and drawn onto the ga
 ![Reward History](docs/reward_history.png)
 
 ### Why DQN over PPO?
-We started with [PPO](https://arxiv.org/abs/1707.06347) but it suffered from **[catastrophic forgetting](https://en.wikipedia.org/wiki/Catastrophic_interference)** — the agent would learn to play well, then suddenly "forget" everything and stand still. DQN's replay buffer stores 100K past experiences and learns from them repeatedly. A rare successful dodge is seen hundreds of times during training, not just once.
+We started with [PPO](https://arxiv.org/abs/1707.06347) but it suffered from **[catastrophic forgetting](https://en.wikipedia.org/wiki/Catastrophic_interference)** — the agent would learn to play well, then suddenly "forget" everything and stand still. DQN's replay buffer stores 200K past experiences and learns from them repeatedly. A rare successful dodge is seen hundreds of times during training, not just once.
 
 ### Stability
 - **Auto-rollback**: If average reward drops 50% from peak, loads the best checkpoint
@@ -48,7 +49,7 @@ We started with [PPO](https://arxiv.org/abs/1707.06347) but it suffered from **[
 | Component | Technology |
 |-----------|-----------|
 | NES Emulator | [cynes](https://github.com/Youlixx/cynes) (Rust, ARM64 + x86_64) |
-| RL Algorithm | DQN with experience replay ([PyTorch](https://pytorch.org)) |
+| RL Algorithm | DQN + Double DQN + PER ([PyTorch](https://pytorch.org)) |
 | GPU | Apple Silicon [MPS](https://developer.apple.com/metal/) / NVIDIA [CUDA](https://developer.nvidia.com/cuda-toolkit) / CPU |
 | Dashboard | [FastAPI](https://fastapi.tiangolo.com) + WebSocket + [Chart.js](https://www.chartjs.org) + [Lucide](https://lucide.dev) icons |
 | Video Replay | [FFmpeg](https://ffmpeg.org) (H.264) |
@@ -61,7 +62,39 @@ Real-time web dashboard for monitoring training:
 - **Reward history chart** with configurable rolling average + survival time
 - **Level progress bar** with death heatmap
 - **Top runs table** with reward, level, and duration
-- **Controls** (admin only): Pause, Restart, Save, Play Best, Episode Length slider
+- **Config tab** with all hyperparameters and feature flags
+- **Run Log** with sub-tabs: Rewards breakdown, Events feed, Agent View (visible enemies/bullets/weapon), Features
+- **Controls** (admin only): Pause (spacebar), Loop, Reset, Checkpoint, Best Run, Practice, step-by-step (arrow right)
+
+## Watch Mode (FCEUX with Audio)
+
+Watch the agent play with real NES audio using [FCEUX](https://fceux.com):
+
+```bash
+brew install fceux
+./scripts/watch.sh
+# Select 1 Player in the FCEUX window — agent takes over
+```
+
+FCEUX sends screen pixels + RAM to Python via file bridge. Python runs the model and sends actions back. The agent receives the same overlay and features as during training.
+
+**Note**: The agent plays slightly worse in FCEUX than in training due to:
+- ~2 frame input latency (file I/O)
+- Minor pixel differences between emulators (cynes vs FCEUX palette)
+- Early models have very close Q-values, making them sensitive to small input changes
+
+The web dashboard shows the true agent performance.
+
+## Practice Mode
+
+Save/Load NES game state for targeted training on specific sections:
+
+- **Save State** — saves current game moment; agent respawns here after every death
+- **Clear State** — removes saved state, back to normal training
+- Stats are not recorded during practice (marked as PRACTICE in dashboard)
+- Model is auto-saved before practice starts (`pre_practice.pt`) as safety net
+
+Useful for training on boss fights or difficult sections without playing through the entire level each time.
 
 ## Quick Start
 
@@ -101,7 +134,7 @@ contra-rl-dqn/
 │   │   ├── contra_env.py     # NES environment, reward, death detection, sprite overlay
 │   │   └── wrappers.py       # Grayscale, resize 128x128, frame stack, stream capture
 │   ├── training/
-│   │   ├── dqn.py            # DQN with replay buffer, auto-rollback
+│   │   ├── dqn.py            # DQN + Double DQN + PER, auto-rollback
 │   │   └── callbacks.py      # Frame buffer, best run recording
 │   ├── web/
 │   │   ├── server.py         # FastAPI dashboard, dual WebSocket (frames + stats)
@@ -111,15 +144,19 @@ contra-rl-dqn/
 ├── config/
 │   └── settings.py           # Training hyperparameters
 ├── scripts/
-│   └── run.py                # Main entry point
-├── roms/                     # ROM goes here (gitignored)
+│   ├── run.py                # Main entry point
+│   ├── watch.py              # FCEUX watch mode (agent + audio)
+│   ├── watch.sh              # One-command launcher
+│   ├── fceux_agent.lua       # FCEUX Lua bridge script
+│   └── ram_monitor.py        # RAM debugging tool (play in FCEUX, monitor changes)
+├── roms/                     # ROM + NES palette (gitignored)
 ├── checkpoints/              # Model checkpoints (gitignored)
 └── start.sh / start-fresh.sh # Launch scripts
 ```
 
 ## RAM Addresses (Contra NES)
 
-Discovered through systematic RAM scanning with cynes (full NES RAM map: [Data Crystal](https://datacrystal.tcrf.net/wiki/Contra_(NES)/RAM_map)):
+Discovered through RAM scanning with cynes and verified against [ROM disassembly](https://github.com/vermiceli/nes-contra-us) (see also: [Data Crystal](https://datacrystal.tcrf.net/wiki/Contra_(NES)/RAM_map)):
 
 | Address | Purpose | Notes |
 |---------|---------|-------|
@@ -132,9 +169,15 @@ Discovered through systematic RAM scanning with cynes (full NES RAM map: [Data C
 | `$31A` | Player Y | Screen position |
 | `$33E-$347` | Enemy X positions | 16 slots |
 | `$324-$32D` | Enemy Y positions | 16 slots |
-| `$528` | Enemy types | 16 slots |
-| `$578` | Enemy HP | 16 slots |
+| `$528` | Enemy types | 16 slots ([full list](https://github.com/vermiceli/nes-contra-us/blob/main/src/bank7.asm#L9161)) |
+| `$578` | Enemy HP | 16 slots, boss door=32, bomb turret=16 |
+| `$580` | Turret HP | 16 slots, counts DOWN per hit (turret: 7→0 = destroyed) |
+| `$504` | Turret rotation | 8 directions (0/32/64/96/128/160/192/224) |
 | `$508` | Enemy X velocity | For static vs moving detection |
+| `$AA` | Player weapon | Low 3 bits: 0=R, 1=M, 2=F, 3=S, 4=L, 5=B |
+| `$AE` | Invincibility timer | 127→0 countdown after respawn |
+| `$4B8` | Enemy routine | Per slot, 0=dead |
+| `$5A8` | Enemy attributes | For weapon items: weapon code inside |
 
 **Important**: cynes uses reversed bit order for controller input (`NES_INPUT_RIGHT=1`, `NES_INPUT_A=128`).
 

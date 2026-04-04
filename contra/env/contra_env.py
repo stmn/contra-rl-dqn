@@ -45,9 +45,11 @@ ACTIONS = [
 RAM_PLAYER_STATE = 0x0090  # 0=falling/respawn, 1=alive, 2=dead
 RAM_LEVEL = 0x0030         # 0-7 = stage 1-8
 RAM_PLAYER_MODE = 0x0022   # 0=1P, 1=2P
-RAM_SCROLL_HI = 0x0060     # camera scroll coarse (tiles, wraps 0-255)
-RAM_SCROLL_LO = 0x0065     # camera scroll fine (pixels within tile)
+RAM_SCROLL_HI = 0x0064     # LEVEL_SCREEN_NUMBER (screen index, from ROM)
+RAM_SCROLL_LO = 0x0065     # LEVEL_SCREEN_SCROLL_OFFSET (pixels within screen)
 RAM_SCORE = 0x07E2         # Player 1 score (2 bytes, low byte)
+RAM_ENEMY_HP_BASE = 0x0580 # Enemy HP per slot (16 slots), counts down to 0 = destroyed
+RAM_WEAPON = 0x00AA        # Player 1 current weapon (low 3 bits: 0=R,1=M,2=F,3=S,4=L,5=B)
 
 # Action categories for reward shaping
 _RIGHT_ACTIONS = frozenset(i for i, a in enumerate(ACTIONS) if a & BUTTON_RIGHT)
@@ -65,7 +67,7 @@ class ContraEnv(gym.Env):
         rom_path: str | Path | None = None,
         render_mode: str | None = "rgb_array",
         frame_skip: int = 2,
-        max_episode_steps: int = 600,
+        max_episode_steps: int = 18_000,  # 10 min safety net, game over ends sooner
         overlay_sprites: bool = False,
     ) -> None:
         super().__init__()
@@ -84,7 +86,7 @@ class ContraEnv(gym.Env):
         if self._hybrid_obs:
             self.observation_space = spaces.Dict({
                 "image": spaces.Box(low=0, high=255, shape=(240, 256, 3), dtype=np.uint8),
-                "features": spaces.Box(low=0.0, high=1.0, shape=(22,), dtype=np.float32),
+                "features": spaces.Box(low=0.0, high=1.0, shape=(28,), dtype=np.float32),
             })
         else:
             self.observation_space = spaces.Box(
@@ -104,17 +106,30 @@ class ContraEnv(gym.Env):
         self._idle_counter = 0
         self._death_this_frame = False
         self._prev_score = 0
+        self._saved_game_state: np.ndarray | None = None
+        self._saved_scroll: int = 0
+        self._practice = False
+        self._start_level: int = 0  # 0 = level 1 (default)
+        self._level_states: dict[int, np.ndarray] = {}  # level_idx → NES save state
+        self._prev_enemy_hp = [0] * 16  # track $578+slot for hit reward
+        self._prev_weapon = 0
+        self._reward_weapon = 0.0
 
         # Reward breakdown counters
         self._reward_scroll = 0.0
         self._reward_death = 0.0
+        self._reward_kills = 0.0
+        self._reward_turret = 0.0
+        self._reward_idle = 0.0
         self._death_count = 0
+        self._turret_hits = 0
+        self._events: list[tuple[int, str]] = []  # (step, description)
 
         # Save initial state after selecting 1 player
         self._initial_state: np.ndarray | None = None
         self._boot()
 
-    def _boot(self) -> None:
+    def _boot(self, level: int = 0) -> None:
         """Advance past title screen, select 1 PLAYER, save initial state."""
         self._nes.reset()
 
@@ -149,12 +164,26 @@ class ContraEnv(gym.Env):
         # Wait for game to fully load
         for _ in range(600):
             self._nes.step(1)
+            if level > 0:
+                self._nes[0x30] = level  # force level every frame
 
-        self._initial_state = self._nes.save()  # numpy array
+        if level == 0:
+            self._initial_state = self._nes.save()
 
     def request_restart(self) -> None:
         """Called from web UI — forces episode to end on next step."""
         self._force_restart = True
+
+    def save_game_state(self) -> None:
+        """Save current NES state. Future resets will load from here (practice mode)."""
+        self._saved_game_state = self._nes.save()
+        self._saved_scroll = self._cumulative_scroll
+        self._practice = True
+
+    def clear_game_state(self) -> None:
+        """Remove saved NES state. Resets go back to level start."""
+        self._saved_game_state = None
+        self._practice = False
 
     def _read_raw_scroll(self) -> int:
         return self._nes[RAM_SCROLL_HI] * 256 + self._nes[RAM_SCROLL_LO]
@@ -175,7 +204,14 @@ class ContraEnv(gym.Env):
 
     def reset(self, *, seed=None, options=None):
         super().reset(seed=seed)
-        if self._initial_state is not None:
+        if self._saved_game_state is not None:
+            self._nes.load(self._saved_game_state)
+        elif self._start_level > 0 and self._start_level in self._level_states:
+            self._nes.load(self._level_states[self._start_level])
+        elif self._start_level > 0:
+            self._boot(level=self._start_level)
+            self._level_states[self._start_level] = self._nes.save()
+        elif self._initial_state is not None:
             self._nes.load(self._initial_state)
         else:
             self._boot()
@@ -185,14 +221,27 @@ class ContraEnv(gym.Env):
         self._total_reward = 0.0
 
         self._raw_scroll_prev = self._read_raw_scroll()
-        self._cumulative_scroll = 0
-        self._prev_scroll = 0
+        if self._saved_game_state is not None:
+            self._cumulative_scroll = self._saved_scroll
+        else:
+            self._cumulative_scroll = 0
+        self._prev_scroll = self._cumulative_scroll
         self._reward_scroll = 0.0
+        self._reward_kills = 0.0
+        self._reward_turret = 0.0
+        self._reward_idle = 0.0
         self._idle_counter = 0
         self._death_this_frame = False
         self._prev_score = self._nes[RAM_SCORE] + self._nes[RAM_SCORE + 1] * 256
         self._reward_death = 0.0
         self._death_count = 0
+        self._turret_hits = 0
+        self._reached_boss = False
+        self._reached_boss_level = -1
+        self._prev_weapon = self._nes[RAM_WEAPON] & 0x07
+        self._reward_weapon = 0.0
+        self._events = []
+        self._prev_enemy_hp = [self._nes[0x578 + s] for s in range(16)]
         frame = self._nes.step(1)
         self._last_frame = frame.copy()
         info = self._get_info()
@@ -234,6 +283,7 @@ class ContraEnv(gym.Env):
                 self._reward_death += settings.death_penalty
                 total_reward += settings.death_penalty
                 self._death_this_frame = True
+                self._events.append((self._step_count, f"Death {settings.death_penalty:.0f}"))
             elif player_state != 2:
                 self._death_this_frame = False
 
@@ -267,9 +317,9 @@ class ContraEnv(gym.Env):
         elif scroll_delta > 1000:
             scroll_delta = 0  # ignore glitches
 
-        # Speed bonus: faster scroll = more reward per pixel
-        speed_multiplier = 1.0 + min(scroll_delta / 100.0, 1.0)
-        scroll_reward = scroll_delta * 0.08 * speed_multiplier
+        # Speed bonus: faster scroll = more reward per screen unit
+        speed_multiplier = 1.0 + min(scroll_delta / 5.0, 1.0)
+        scroll_reward = scroll_delta * 1.6 * speed_multiplier
         total_reward += scroll_reward
         self._reward_scroll += scroll_reward
         self._prev_scroll = scroll
@@ -277,27 +327,69 @@ class ContraEnv(gym.Env):
         # Kill reward — score increased = enemy killed
         score = self._nes[RAM_SCORE] + self._nes[RAM_SCORE + 1] * 256
         score_delta = score - self._prev_score
-        if 0 < score_delta < 100:  # sanity check
-            total_reward += score_delta * 15.0
+        _KILL_NAMES = {1:"Soldier",3:"Rot.Gun",5:"Sniper/Turret",10:"Wall Plating",
+                       20:"Heavy",30:"Elite",50:"Tank",100:"Boss",150:"Boss"}
+        if 0 < score_delta < 200:
+            name = _KILL_NAMES.get(score_delta)
+            if name:
+                kill_reward = score_delta * 15.0
+                total_reward += kill_reward
+                self._reward_kills += kill_reward
+                self._events.append((self._step_count, f"Kill {name} +{kill_reward:.0f}"))
+            else:
+                px, py = self._nes[0x334], self._nes[0x31A]
+                self._events.append((self._step_count, f"Unknown kill delta={score_delta} pos=({px},{py})"))
         self._prev_score = score
 
-        # Idle penalty: standing still = negative reward (skip during death/respawn)
-        if scroll_delta == 0 and self._nes[RAM_PLAYER_STATE] == 1:
-            self._idle_counter += 1
-            if self._idle_counter > 10:  # grace period ~0.7s
-                total_reward -= 0.5
-            # Penalize LEFT at left screen edge (player X < 20px)
-            if action in _LEFT_ACTIONS and self._nes[0x334] < 20:
-                total_reward -= 0.3
-        else:
-            self._idle_counter = 0
+        # Enemy HP hit reward — $578+slot (ENEMY_HP from ROM), counts down on damage
+        # Previously used $580 which is just $578 offset by 8 slots ($578+15 == $580+7 == $587)
+        for slot in range(16):
+            hp = self._nes[0x578 + slot]
+            prev_hp = self._prev_enemy_hp[slot]
+            if 0 < hp < prev_hp <= 0x30:  # skip $F0/$F1 special values
+                etype = self._nes[0x528 + slot]
+                ex = self._nes[0x33E + slot]
+                ey = self._nes[0x324 + slot]
+                _HIT_NAMES = {4:"Rotating Gun",7:"Red Turret",8:"Wall Cannon",0x0E:"Turret Man",
+                              0x10:"Boss Turret",0x11:"Boss Door"}
+                hit_name = _HIT_NAMES.get(etype)
+                if hit_name:
+                    total_reward += 50.0
+                    self._reward_turret += 50.0
+                    self._turret_hits += 1
+                    self._events.append((self._step_count,
+                        f"Turret hit {hit_name} +50 HP {prev_hp}→{hp}"))
+                else:
+                    self._events.append((self._step_count,
+                        f"Unknown event type={etype} slot={slot} HP {prev_hp}→{hp} pos=({ex},{ey})"))
+            self._prev_enemy_hp[slot] = hp
+
+        # Weapon pickup reward
+        _WEAPON_STRENGTH = [0, 2, 1, 3, 2, 0, 0]  # R=0,M=2,F=1,S=3,L=2,B=0,Falcon=0
+        cur_weapon = self._nes[RAM_WEAPON] & 0x07
+        if cur_weapon != self._prev_weapon:
+            new_str = _WEAPON_STRENGTH[min(cur_weapon, 6)]
+            old_str = _WEAPON_STRENGTH[min(self._prev_weapon, 6)]
+            if new_str > old_str:
+                weapon_reward = 100.0 * (new_str - old_str)
+                total_reward += weapon_reward
+                self._reward_weapon += weapon_reward
+                names = ["Default", "M-Gun", "Fire", "Spread", "Laser", "Barrier", "Falcon"]
+                self._events.append((self._step_count,
+                    f"Weapon {names[self._prev_weapon]}→{names[cur_weapon]} +{weapon_reward:.0f}"))
+            self._prev_weapon = cur_weapon
+
+        # Boss detection: $84 = BOSS_AUTO_SCROLL_COMPLETE from ROM (works for all levels)
+        level = self._nes[RAM_LEVEL]
+        if not self._reached_boss and self._nes[0x84] == 1:
+            self._reached_boss = True
+            self._reached_boss_level = level
+            self._events.append((self._step_count, f"Reached L{level+1} boss!"))
 
         # (Death penalty is applied above in frame skip loop)
 
         self._last_frame = frame.copy() if frame is not None else None
 
-        # Clamp reward
-        total_reward = float(np.clip(total_reward, -50.0, 50.0))
         self._total_reward += total_reward
 
         # Truncation: time limit (death ends episode via terminated)
@@ -317,68 +409,119 @@ class ContraEnv(gym.Env):
             "player_state": self._nes[RAM_PLAYER_STATE],
             "reward_scroll": round(self._reward_scroll, 1),
             "reward_death": round(self._reward_death, 1),
+            "reward_kills": round(self._reward_kills, 1),
+            "reward_turret": round(self._reward_turret, 1),
+            "reward_idle": round(self._reward_idle, 1),
+            "reward_weapon": round(self._reward_weapon, 1),
             "death_count": self._death_count,
+            "turret_hits": self._turret_hits,
+            "practice": self._practice,
+            "reached_boss": self._reached_boss,
+            "reached_boss_level": self._reached_boss_level,
+            "events": self._events[-20:],  # last 20 events
         }
 
     def _build_features(self) -> np.ndarray:
-        """Build 22-dim feature vector from RAM for hybrid observation."""
+        """Build 28-dim feature vector from RAM for hybrid observation."""
         nes = self._nes
-        f = np.zeros(22, dtype=np.float32)
+        f = np.zeros(28, dtype=np.float32)
 
         # Player (4 features)
         px = nes[0x334]
         py = nes[0x31A]
         f[0] = px / 256.0
         f[1] = py / 240.0
-        f[2] = 1.0 if nes[RAM_PLAYER_STATE] == 1 else 0.0
+        f[2] = (nes[RAM_WEAPON] & 0x07) / 6.0  # current weapon (0=R,1=M,2=F,3=S,4=L,5=B)
         f[3] = 1.0 if (nes[0xA0] & 0x0F) > 0 else 0.0  # in air
 
         # Find nearest 3 enemies by distance to player
+        # Same addresses as overlay: $528=type, $578=hp, $4B8=routine, $33E=X, $324=Y
         enemies = []
         for slot in range(16):
             etype = nes[0x528 + slot]
             ehp = nes[0x578 + slot]
+            routine = nes[0x4B8 + slot]
             if etype == 0 and ehp == 0:
+                continue
+            if routine == 0 or ehp == 0:
+                continue
+            ex = nes[0x33E + slot]
+            ey = nes[0x324 + slot]
+            if ey > 230 or ey < 8 or ex < 24 or ex > 240:
+                continue
+            if etype in (1, 0x02, 0x12):  # enemy bullet / weapon box debris / bridge
+                continue
+            dist = abs(int(ex) - px) + abs(int(ey) - py)
+            enemies.append((dist, int(ex), int(ey), slot))
+
+        enemies.sort(key=lambda e: e[0])
+
+        # Nearest 3 enemies (4 features each: dx, dy, x_velocity, hp)
+        for i, (dist, ex, ey, slot) in enumerate(enemies[:3]):
+            base = 4 + i * 4
+            f[base] = np.clip((ex - px + 128) / 256.0, 0.0, 1.0)
+            f[base + 1] = np.clip((ey - py + 120) / 240.0, 0.0, 1.0)
+            x_vel = nes[0x508 + slot]
+            f[base + 2] = (x_vel if x_vel < 128 else x_vel - 256) / 128.0 * 0.5 + 0.5  # velocity
+            f[base + 3] = min(nes[0x580 + slot], 20) / 20.0  # turret/boss HP
+
+        # Nearest 3 bullets (type 1 = enemy projectile)
+        projectiles = []
+        for slot in range(16):
+            etype = nes[0x528 + slot]
+            ehp = nes[0x578 + slot]
+            routine = nes[0x4B8 + slot]
+            if etype != 1:
+                continue
+            if routine == 0 or ehp == 0:
                 continue
             ex = nes[0x33E + slot]
             ey = nes[0x324 + slot]
             if ey > 230 or ey < 8 or ex < 8 or ex > 248:
                 continue
-            dist = abs(ex - px) + abs(ey - py)
-            enemies.append((dist, ex, ey, slot))
+            dist = abs(int(ex) - px) + abs(int(ey) - py)
+            projectiles.append((dist, int(ex), int(ey)))
 
-        enemies.sort(key=lambda e: e[0])
+        projectiles.sort(key=lambda p: p[0])
 
-        # Nearest 3 enemies (4 features each: dx, dy, velocity, attack delay)
-        for i, (dist, ex, ey, slot) in enumerate(enemies[:3]):
-            base = 4 + i * 4
-            f[base] = (ex - px + 128) / 256.0      # relative X, centered
-            f[base + 1] = (ey - py + 120) / 240.0   # relative Y, centered
-            f[base + 2] = nes[0x508 + slot] / 256.0  # X velocity
-            f[base + 3] = nes[0x558 + slot] / 256.0  # attack delay timer
+        for i, (dist, bx, by) in enumerate(projectiles[:3]):
+            base = 16 + i * 2
+            f[base] = np.clip((bx - px + 128) / 256.0, 0.0, 1.0)
+            f[base + 1] = np.clip((by - py + 120) / 240.0, 0.0, 1.0)
 
         # Aggregate (3 features)
-        f[16] = min(len(enemies), 16) / 16.0  # num enemies on screen
-        f[17] = enemies[0][0] / 256.0 if enemies else 1.0  # nearest distance
-        f[18] = 1.0 if nes[0x8E] > 0 else 0.0  # enemy attack flag
+        f[22] = min(len(enemies), 16) / 16.0
+        f[23] = np.clip(enemies[0][0] / 400.0, 0.0, 1.0) if enemies else 1.0
+        f[24] = min(nes[0xAE], 127) / 127.0  # invincibility timer after respawn ($AE: 127→0)
 
-        # Player movement (3 features)
-        f[19] = (nes[0xA4] & 0x60) / 96.0  # edge fall code (bits 5-6)
-        f[20] = 1.0 if (nes[0xA0] & 0x0F) > 0 else 0.0  # jump status
+        # Player movement (2 features)
+        f[25] = min((nes[0xA4] & 0x60) / 96.0, 1.0)  # edge fall
         y_vel = nes[0xC6]
-        f[21] = (y_vel if y_vel < 128 else y_vel - 256) / 128.0 + 0.5  # Y velocity normalized
+        f[26] = np.clip((y_vel if y_vel < 128 else y_vel - 256) / 128.0 + 0.5, 0.0, 1.0)
+
+        # Level progress (1 feature)
+        f[27] = min(self._cumulative_scroll / 3328.0, 1.0)  # L1: 13 screens * 256px
 
         return f
 
     # Overlay config: type → (shade, shape)
     # Shapes: 'circle', 'vrect' (vertical rect), 'triangle', 'diamond'
+    # Enemy types from ROM disassembly: github.com/vermiceli/nes-contra-us
     _OVERLAY_CONFIG = {
-        0x01: (255, 'circle'),     # enemy bullet — small bright circle
-        0x02: (180, 'diamond'),    # destructible box (bonus) — diamond
-        0x03: (180, 'diamond'),    # flying bonus — diamond
-        0x04: (255, 'triangle'),   # static turret — triangle
-        0x05: (255, 'vrect'),      # running soldier — vertical rect
-        0x06: (255, 'vrect'),      # static enemy/sniper — vertical rect
+        0x01: (255, 'circle'),     # enemy bullet
+        0x02: (180, 'diamond'),    # weapon box (pill box sensor)
+        0x03: (180, 'diamond'),    # flying capsule (weapon zeppelin)
+        0x04: (255, 'triangle'),   # rotating gun (HP=8)
+        0x05: (255, 'vrect'),      # soldier (running man)
+        0x06: (255, 'vrect'),      # sniper (rifle man)
+        0x07: (255, 'triangle'),   # red turret (HP=8)
+        0x08: (255, 'triangle'),   # wall cannon / triple cannon
+        0x0B: (255, 'circle'),     # mortar shot
+        0x0C: (255, 'vrect'),      # scuba diver
+        0x0E: (255, 'vrect'),      # turret man (HP=10)
+        0x0F: (255, 'circle'),     # turret man bullet
+        0x10: (255, 'triangle'),   # L1: boss bomb turret (HP=16)
+        0x11: (200, 'diamond'),    # L1: boss door plate (10,000 pts)
     }
 
     def _apply_overlay(self, frame: np.ndarray) -> np.ndarray:

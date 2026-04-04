@@ -7,24 +7,46 @@
     <link rel="stylesheet" href="/static/style.css?v=2">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://unpkg.com/@popperjs/core@2"></script>
+    <script src="https://unpkg.com/tippy.js@6"></script>
 </head>
 <body>
-    <header>
+    <div class="header-wrap"><header>
         <div class="header-left">
             <i data-lucide="gamepad-2" class="header-icon"></i>
-            <h1>CONTRA RL</h1>
+            <h1 data-tippy-content="AI agent learning to play Contra (NES, 1988) using Deep Q-Network reinforcement learning. The agent learns by trial and error — no human gameplay examples.">CONTRA RL</h1>
         </div>
         <div class="header-right">
-            <div class="header-stat">
-                <i data-lucide="monitor" class="icon-sm"></i>
-                <span id="stream-fps">0</span> fps
+            <div class="header-stat" data-tippy-content="Current training level (Cmd+1-8 to switch)">
+                <i data-lucide="layers" class="icon-sm"></i>
+                L<span id="header-level">1</span>
             </div>
+            <div class="header-stat" data-tippy-content="Current training episode number">
+                <i data-lucide="hash" class="icon-sm"></i>
+                EP <span id="header-episode">0</span>
+            </div>
+            <div class="header-stat" data-tippy-content="Total training wall-clock time">
+                <i data-lucide="clock" class="icon-sm"></i>
+                <span id="header-time">0m</span>
+            </div>
+            <div class="header-stat" data-tippy-content="Replay buffer usage (current / max capacity)">
+                <i data-lucide="database" class="icon-sm"></i>
+                <span id="header-buffer">0</span>
+            </div>
+            <div class="header-stat" data-tippy-content="RAM usage: current / peak (training process)">
+                <i data-lucide="cpu" class="icon-sm"></i>
+                <span id="header-ram">0</span>
+            </div>
+            <span class="badge practice" id="practice-badge" style="display:none">
+                <i data-lucide="flask-conical" class="icon-xs"></i>
+                PRACTICE
+            </span>
             <span class="badge" id="status-badge">
                 <i data-lucide="wifi-off" class="icon-xs"></i>
                 CONNECTING
             </span>
         </div>
-    </header>
+    </header></div>
 
     <main>
         <section class="game-panel">
@@ -35,74 +57,155 @@
                     Waiting for frames...
                 </div>
             </div>
-            <div class="controls admin-only" style="display:none">
-                <button id="btn-pause" onclick="togglePause()">
-                    <i data-lucide="pause" class="icon-btn"></i> Pause
-                </button>
-                <button id="btn-restart" onclick="restartGame()">
-                    <i data-lucide="rotate-ccw" class="icon-btn"></i> Restart
-                </button>
-                <button id="btn-save" onclick="saveCheckpoint()">
-                    <i data-lucide="save" class="icon-btn"></i> Save
-                </button>
-                <button id="btn-replay" onclick="playBestRun()">
-                    <i data-lucide="play" class="icon-btn"></i> Top Replay
-                </button>
-            </div>
         </section>
 
         <section class="stats-panel">
+            <div class="controls-grid admin-only" style="display:none">
+                <div class="control-group">
+                    <button id="btn-pause" onclick="togglePause()" data-tippy-content="Pause / Resume (Space)">
+                        <i data-lucide="pause" class="icon-btn"></i>
+                    </button>
+                    <button id="btn-auto-restart" onclick="toggleAutoRestart()" class="active" data-tippy-content="Loop: auto-restart after game over">
+                        <i data-lucide="repeat" class="icon-btn"></i>
+                    </button>
+                    <button id="btn-restart" onclick="restartGame()" data-tippy-content="Reset: force new episode">
+                        <i data-lucide="rotate-ccw" class="icon-btn"></i>
+                    </button>
+                </div>
+                <div class="control-group">
+                    <button id="btn-save" onclick="saveCheckpoint()" data-tippy-content="Save neural network weights to disk.">
+                        <i data-lucide="hard-drive-download" class="icon-btn"></i> Save Model
+                    </button>
+                    <button id="btn-replay" onclick="playBestRun()" data-tippy-content="Watch recording of the best run.">
+                        <i data-lucide="play" class="icon-btn"></i> Replay
+                    </button>
+                </div>
+                <div class="control-group">
+                    <button id="btn-save-state" onclick="saveGameState()" data-tippy-content="Save game state. Agent respawns here after death.">
+                        <i data-lucide="bookmark-plus" class="icon-btn"></i> Save State
+                    </button>
+                    <button id="btn-clear-state" onclick="clearGameState()" style="display:none" data-tippy-content="Clear saved state, back to normal training.">
+                        <i data-lucide="bookmark-x" class="icon-btn"></i> Clear State
+                    </button>
+                </div>
+            </div>
+            <div class="tabs">
+                <button class="tab active" data-tab="training"><i data-lucide="cpu" class="icon-btn"></i> Overview</button>
+                <button class="tab" data-tab="run-log"><i data-lucide="scroll-text" class="icon-btn"></i> Live</button>
+                <button class="tab" data-tab="top-runs"><i data-lucide="trophy" class="icon-btn"></i> Leaderboard</button>
+                <button class="tab" data-tab="levels"><i data-lucide="layers" class="icon-btn"></i> Levels</button>
+                <button class="tab" data-tab="config"><i data-lucide="settings" class="icon-btn"></i> Config</button>
+            </div>
+
+            <div class="tab-content active" id="tab-training">
             <div class="stat-group">
                 <h2><i data-lucide="cpu" class="icon-heading"></i> Training</h2>
                 <div class="stat-row">
-                    <span class="stat-label"><i data-lucide="hash" class="icon-xs"></i> Total episodes</span>
+                    <span class="stat-label" data-tippy-content="One episode = one full game (3 lives). Agent plays until game over or time limit."><i data-lucide="hash" class="icon-xs"></i> Total episodes</span>
                     <span class="stat-value" id="episode">0</span>
                 </div>
                 <div class="stat-row">
-                    <span class="stat-label"><i data-lucide="clock" class="icon-xs"></i> Time</span>
+                    <span class="stat-label" data-tippy-content="Wall-clock time since training started."><i data-lucide="clock" class="icon-xs"></i> Time</span>
                     <span class="stat-value" id="training-time">0m</span>
                 </div>
                 <div class="stat-row">
-                    <span class="stat-label"><i data-lucide="footprints" class="icon-xs"></i> Timesteps</span>
+                    <span class="stat-label" data-tippy-content="Total individual frames processed. Each timestep = one decision by the agent. More steps = more experience."><i data-lucide="footprints" class="icon-xs"></i> Timesteps</span>
                     <span class="stat-value" id="timesteps">0 / 100M</span>
                 </div>
                 <div class="stat-row">
-                    <span class="stat-label"><i data-lucide="zap" class="icon-xs"></i> Steps/sec</span>
+                    <span class="stat-label" data-tippy-content="Training speed — how many game frames the agent processes per second. Higher = faster learning."><i data-lucide="zap" class="icon-xs"></i> Steps/sec</span>
                     <span class="stat-value" id="fps">0</span>
                 </div>
                 <div class="stat-row">
-                    <span class="stat-label"><i data-lucide="timer-off" class="icon-xs"></i> Hit time limit</span>
+                    <span class="stat-label" data-tippy-content="% of episodes that ended by time limit instead of game over. High % means the agent survives but doesn't progress."><i data-lucide="timer-off" class="icon-xs"></i> Hit time limit</span>
                     <span class="stat-value" id="timeout-pct">0%</span>
                 </div>
                 <div class="stat-row">
-                    <span class="stat-label"><i data-lucide="shield" class="icon-xs"></i> Auto-rollbacks</span>
+                    <span class="stat-label" data-tippy-content="Safety net: if avg reward drops 50% from peak, the model reverts to an earlier checkpoint to prevent catastrophic forgetting."><i data-lucide="shield" class="icon-xs"></i> Auto-rollbacks</span>
                     <span class="stat-value" id="rollback-count">0</span>
                 </div>
                 <div class="stat-row">
-                    <span class="stat-label"><i data-lucide="bookmark" class="icon-xs"></i> Last auto-save</span>
+                    <span class="stat-label" data-tippy-content="Model is automatically saved when avg reward reaches a new peak."><i data-lucide="bookmark" class="icon-xs"></i> Last auto-save</span>
                     <span class="stat-value" id="autosave-ago">-</span>
                 </div>
                 <div class="stat-row" id="rollback-ago-row" style="display:none">
-                    <span class="stat-label"><i data-lucide="undo-2" class="icon-xs"></i> Last rollback</span>
+                    <span class="stat-label" data-tippy-content="Time since the last auto-rollback was triggered."><i data-lucide="undo-2" class="icon-xs"></i> Last rollback</span>
                     <span class="stat-value" id="rollback-ago"></span>
                 </div>
             </div>
 
+            </div>
+
+            <div class="tab-content" id="tab-top-runs">
             <div class="stat-group top-runs-container">
                 <h2><i data-lucide="trophy" class="icon-heading"></i> Top Runs</h2>
                 <table id="top-runs">
                     <thead>
-                        <tr><th>#</th><th>Episode</th><th>Reward</th><th>Level</th><th>Time</th></tr>
+                        <tr>
+                            <th>#</th>
+                            <th data-tippy-content="Which training episode this run happened in.">Episode</th>
+                            <th data-tippy-content="Total reward earned — mainly from scrolling the map forward. Higher = further progress.">Reward</th>
+                            <th data-tippy-content="How long the agent survived (in seconds of game time).">Time</th>
+                        </tr>
                     </thead>
                     <tbody></tbody>
                 </table>
+            </div>
+            </div>
+
+
+
+            <div class="tab-content" id="tab-run-log">
+                <div class="subtabs">
+                    <button class="subtab active" data-subtab="rewards" onclick="switchSubTab(this)">Rewards</button>
+                    <button class="subtab" data-subtab="events" onclick="switchSubTab(this)">Events</button>
+                    <button class="subtab" data-subtab="agent-view" onclick="switchSubTab(this)">Agent View</button>
+                    <button class="subtab" data-subtab="features" onclick="switchSubTab(this)">Features</button>
+                    <button class="subtab" data-subtab="actions" onclick="switchSubTab(this)">Actions</button>
+                </div>
+                <div class="subtab-body">
+                    <div class="subtab-content active" id="subtab-rewards">
+                        <div id="run-log-breakdown"></div>
+                    </div>
+                    <div class="subtab-content" id="subtab-events">
+                        <div id="run-log-events" style="font-size:11px;font-family:monospace;max-height:400px;overflow-y:auto"></div>
+                    </div>
+                    <div class="subtab-content" id="subtab-agent-view">
+                        <div id="agent-view-text" style="font-size:12px;font-family:monospace"></div>
+                    </div>
+                    <div class="subtab-content" id="subtab-features">
+                        <div class="agent-input-section" id="features-section" style="display:none">
+                            <div class="features-grid" id="features-grid"></div>
+                        </div>
+                    </div>
+                    <div class="subtab-content" id="subtab-actions">
+                        <div id="action-bars"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="tab-content" id="tab-levels">
+            <div class="stat-group">
+                <h2><i data-lucide="layers" class="icon-heading"></i> Levels</h2>
+                <div id="levels-list"></div>
+                <div style="margin-top:12px;color:#555;font-size:11px">
+                    Keyboard: <strong>Cmd+1</strong> to <strong>Cmd+8</strong> (Mac) or <strong>Ctrl+1</strong> to <strong>Ctrl+8</strong> (Win/Linux) to switch levels. Each level has its own model and statistics.
+                </div>
+            </div>
+            </div>
+
+            <div class="tab-content" id="tab-config">
+            <div class="stat-group">
+                <h2><i data-lucide="settings" class="icon-heading"></i> Configuration</h2>
+                <div id="config-content"></div>
+            </div>
             </div>
         </section>
     </main>
 
     <section class="level-progress">
         <div class="progress-header">
-            <h2><i data-lucide="map" class="icon-heading"></i> Level Progress</h2>
+            <h2><i data-lucide="map" class="icon-heading"></i> Level Progress <span data-tippy-content="Green bar = current run position. Red marks = where the agent died before. Yellow line = personal best (furthest point ever reached)." style="font-weight:400;font-size:10px;cursor:help;color:#555">(?)</span></h2>
             <span class="pb-timer" id="pb-timer"></span>
         </div>
         <div class="progress-bar-container">
@@ -114,23 +217,53 @@
         <div class="chart-container">
             <div class="chart-header">
                 <h2><i data-lucide="trending-up" class="icon-heading"></i> Reward History</h2>
-                <div class="setting-row" style="margin:0;">
-                    <i data-lucide="sliders-horizontal" class="icon-sm"></i>
-                    <label for="avg-window">Avg window</label>
-                    <input type="range" id="avg-window" min="5" max="200" step="5" value="50">
-                    <span id="avg-window-val">50</span>
+                <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+                    <div class="chart-toggle">
+                        <button class="toggle-btn active" id="btn-chart-view" onclick="setChartView('chart')"><i data-lucide="line-chart" class="icon-btn"></i></button>
+                        <button class="toggle-btn" id="btn-table-view" onclick="setChartView('table')"><i data-lucide="table" class="icon-btn"></i></button>
+                    </div>
+                    <div class="setting-row" style="margin:0;" data-tippy-content="Show only the last N episodes. Use to zoom into recent training.">
+                        <label for="data-range">Range</label>
+                        <input type="range" id="data-range" min="50" max="5000" step="50" value="5000">
+                        <span id="data-range-val">All</span>
+                    </div>
+                    <div class="setting-row" style="margin:0;" data-tippy-content="Window size for rolling average. Larger = smoother line, but hides short-term changes.">
+                        <label for="avg-window">Avg</label>
+                        <input type="range" id="avg-window" min="5" max="200" step="5" value="50">
+                        <span id="avg-window-val">50</span>
+                    </div>
                 </div>
             </div>
-            <canvas id="reward-chart"></canvas>
-            <div class="chart-legend">
-                <span class="legend-item"><span class="dot" style="background:rgba(255,68,68,0.3)"></span> Raw reward per episode</span>
-                <span class="legend-item"><span class="dot" style="background:#ffcc00"></span> Avg reward (left axis) — is AI getting further?</span>
-                <span class="legend-item"><span class="dot" style="background:#4CAF50"></span> Avg survival (right axis) — is AI living longer?</span>
+            <div id="chart-view">
+                <canvas id="reward-chart" style="max-height:400px"></canvas>
+                <div class="chart-legend">
+                    <label class="legend-item"><input type="checkbox" checked data-dataset="0" onchange="toggleDataset(this)"> <span class="dot" style="background:rgba(255,68,68,0.3)"></span> Raw reward</label>
+                    <label class="legend-item"><input type="checkbox" checked data-dataset="1" onchange="toggleDataset(this)"> <span class="dot" style="background:#ffcc00"></span> Avg reward: <strong id="live-avg-reward" style="color:#ffcc00">—</strong></label>
+                    <label class="legend-item"><input type="checkbox" data-dataset="2" onchange="toggleDataset(this)"> <span class="dot" style="background:#4CAF50"></span> Avg survival: <strong id="live-avg-survival" style="color:#4CAF50">—</strong></label>
+                    <span id="boss-checkboxes"></span>
+                </div>
+            </div>
+            <div id="table-view" style="display:none;">
+                <table class="stats-table" id="reward-table">
+                    <thead>
+                        <tr><th>Period</th><th>Avg Reward</th><th>Avg Survival</th><th>Best</th><th id="boss-table-headers"></th><th>Episodes</th></tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
             </div>
         </div>
     </section>
 
     <script src="/static/app.js?v=2"></script>
-    <script>lucide.createIcons();</script>
+    <script>
+        lucide.createIcons();
+        tippy('[data-tippy-content]', {
+            theme: 'contra',
+            placement: 'top',
+            arrow: true,
+            delay: [200, 0],
+            maxWidth: 280,
+        });
+    </script>
 </body>
 </html>

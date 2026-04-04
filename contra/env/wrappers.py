@@ -36,14 +36,76 @@ class StreamCapture(gym.Wrapper):
         obs, reward, terminated, truncated, info = self.env.step(action)
         raw = self.env.unwrapped._raw_frame
         frame = _get_image(obs)
-        self._fb.write_env(self._env_id, frame, info.get("scroll", 0), raw_frame=raw)
+        features = self.env.unwrapped._build_features() if hasattr(self.env.unwrapped, '_build_features') else None
+        self._fb.write_env(self._env_id, frame, info.get("scroll", 0), raw_frame=raw, features=features)
+        # Update run log for dashboard Logs tab
+        if self._env_id == 0:
+            nes = self.env.unwrapped._nes
+            from contra.env.contra_env import RAM_WEAPON
+            px, py = int(nes[0x334]), int(nes[0x31A])
+            weapon = int(nes[RAM_WEAPON] & 0x07)
+
+            # Build visible entities list (same addresses as overlay)
+            _BULLET_TYPES = {0x01, 0x0B, 0x0F}  # enemy bullet, mortar, turret bullet
+            _OTHER_TYPES = {0x02, 0x03, 0x12}    # weapon box, flying bonus, bridge
+            visible_enemies = []
+            visible_bullets = []
+            visible_other = []
+            for slot in range(16):
+                etype = nes[0x528 + slot]
+                ehp = nes[0x578 + slot]
+                routine = nes[0x4B8 + slot]
+                if etype == 0 and ehp == 0:
+                    continue
+                if routine == 0 or ehp == 0:
+                    continue
+                ex, ey = int(nes[0x33E + slot]), int(nes[0x324 + slot])
+                if ey > 230 or ey < 8 or ex < 24 or ex > 240:
+                    continue
+                turret_hp = int(nes[0x578 + slot])
+                dist = abs(ex - px) + abs(ey - py)
+                if etype in _BULLET_TYPES:
+                    visible_bullets.append({"x": ex, "y": ey, "dist": dist})
+                elif etype in _OTHER_TYPES:
+                    entry = {"x": ex, "y": ey, "dist": dist, "type": int(etype)}
+                    if etype in (0x00, 0x03):  # weapon items/capsules
+                        entry["weapon"] = int(nes[0x5A8 + slot]) & 0x07
+                    visible_other.append(entry)
+                else:
+                    # Only turrets/bosses have real HP at $580: types 4,7,8,0xE,0x10,0x11
+                    _HP_TYPES = {0x04, 0x07, 0x08, 0x0E, 0x10, 0x11}
+                    hp = turret_hp if etype in _HP_TYPES and 0 < turret_hp <= 32 else 1
+                    visible_enemies.append({"x": ex, "y": ey, "dist": dist, "type": int(etype), "hp": hp})
+
+            visible_enemies.sort(key=lambda e: e["dist"])
+            visible_bullets.sort(key=lambda b: b["dist"])
+
+            self._fb.env0_run_log = {
+                "step": info.get("step", 0),
+                "total_reward": round(info.get("total_reward", 0), 1),
+                "scroll": info.get("scroll", 0),
+                "deaths": info.get("deaths", 0),
+                "reward_scroll": info.get("reward_scroll", 0),
+                "reward_death": info.get("reward_death", 0),
+                "reward_kills": info.get("reward_kills", 0),
+                "reward_turret": info.get("reward_turret", 0),
+                "reward_idle": info.get("reward_idle", 0),
+                "reward_weapon": info.get("reward_weapon", 0),
+                "turret_hits": info.get("turret_hits", 0),
+                "events": info.get("events", []),
+                "player": {"x": px, "y": py, "weapon": weapon},
+                "enemies": visible_enemies[:5],
+                "bullets": visible_bullets[:5],
+                "other": visible_other[:5],
+            }
         return obs, reward, terminated, truncated, info
 
     def reset(self, **kwargs):
         obs, info = self.env.reset(**kwargs)
         raw = self.env.unwrapped._raw_frame
         frame = _get_image(obs)
-        self._fb.write_env(self._env_id, frame, info.get("scroll", 0), raw_frame=raw)
+        features = obs.get("features") if isinstance(obs, dict) else None
+        self._fb.write_env(self._env_id, frame, info.get("scroll", 0), raw_frame=raw, features=features)
         return obs, info
 
 
@@ -95,9 +157,10 @@ class Resize(gym.ObservationWrapper):
 class FrameStack(gym.Wrapper):
     """Stack N consecutive frames as channels. Handles dict obs (features pass through)."""
 
-    def __init__(self, env: gym.Env, n_stack: int = 4) -> None:
+    def __init__(self, env: gym.Env, n_stack: int = 4, frame_buffer=None) -> None:
         super().__init__(env)
         self._n_stack = n_stack
+        self._frame_buffer = frame_buffer
         self._hybrid = isinstance(env.observation_space, spaces.Dict)
 
         if self._hybrid:
@@ -132,6 +195,9 @@ class FrameStack(gym.Wrapper):
         obs, reward, terminated, truncated, info = self.env.step(action)
         image = _get_image(obs)
         stacked = self._stack(image)
+        # Update frame buffer with agent's actual view (last frame from stack)
+        if self._frame_buffer:
+            self._frame_buffer.agent_view = self._frames[:, :, -1].copy()
         if self._hybrid:
             return {"image": stacked, "features": obs["features"]}, reward, terminated, truncated, info
         return stacked, reward, terminated, truncated, info
@@ -147,5 +213,5 @@ def wrap_contra(
         env = StreamCapture(env, frame_buffer=frame_buffer, env_id=env_id)
     env = Grayscale(env)
     env = Resize(env, shape=(128, 128))
-    env = FrameStack(env, n_stack=4)
+    env = FrameStack(env, n_stack=4, frame_buffer=frame_buffer)
     return env

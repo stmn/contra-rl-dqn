@@ -9,6 +9,7 @@ body {
     color: #d0d0d8;
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     min-height: 100vh;
+    overflow-x: hidden;
 }
 
 /* === Header === */
@@ -17,6 +18,11 @@ header {
     align-items: center;
     justify-content: space-between;
     padding: 14px 24px;
+    max-width: 1400px;
+    margin: 0 auto;
+}
+
+.header-wrap {
     background: linear-gradient(180deg, #12121a 0%, #0d0d14 100%);
     border-bottom: 1px solid #1e1e2e;
 }
@@ -76,6 +82,12 @@ header h1 {
     box-shadow: 0 0 20px rgba(255, 68, 68, 0.3);
     animation: pulse 2s infinite;
 }
+.badge.practice {
+    background: linear-gradient(135deg, #ff9800, #e65100);
+    color: #fff;
+    border: none;
+    box-shadow: 0 0 15px rgba(255, 152, 0, 0.3);
+}
 
 @keyframes pulse {
     0%, 100% { opacity: 1; box-shadow: 0 0 20px rgba(255, 68, 68, 0.3); }
@@ -83,10 +95,10 @@ header h1 {
 }
 
 /* === Icons === */
-.icon-xs { width: 13px; height: 13px; opacity: 0.5; }
+.icon-xs { width: 13px; height: 13px; }
 .icon-sm { width: 16px; height: 16px; color: #555; }
 .icon-btn { width: 14px; height: 14px; }
-.icon-heading { width: 15px; height: 15px; vertical-align: -2px; margin-right: 4px; opacity: 0.6; }
+.icon-heading { width: 15px; height: 15px; vertical-align: -2px; margin-right: 4px; }
 .spin { animation: spin 1.5s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
@@ -133,19 +145,37 @@ main {
 }
 
 /* === Controls === */
+.controls-grid {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.control-group {
+    display: flex;
+    gap: 4px;
+    padding-right: 10px;
+    border-right: 1px solid #1e1e2e;
+}
+
+.control-group:last-child {
+    border-right: none;
+    padding-right: 0;
+}
+
 .controls {
     display: flex;
     gap: 6px;
-    margin-top: 10px;
 }
 
-.controls button {
-    flex: 1;
+.controls button,
+.control-group button {
+    white-space: nowrap;
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 6px;
-    padding: 9px 0;
+    padding: 9px 14px;
     background: #12121a;
     color: #999;
     border: 1px solid #1e1e2e;
@@ -157,17 +187,20 @@ main {
     transition: all 0.15s ease;
 }
 
-.controls button:hover {
+.controls button:hover,
+.control-group button:hover {
     background: #1a1a28;
     border-color: #333;
     color: #ccc;
 }
 
-.controls button:active {
+.controls button:active,
+.control-group button:active {
     transform: scale(0.97);
 }
 
-.controls button.active {
+.controls button.active,
+.control-group button.active {
     background: #2a1515;
     border-color: #ff4444;
     color: #ff4444;
@@ -208,12 +241,197 @@ main {
     font-size: 13px;
 }
 
+/* === Tabs === */
+.tabs {
+    display: flex;
+    gap: 4px;
+    margin-top: 10px;
+    margin-bottom: -1px;
+    position: relative;
+    z-index: 1;
+}
+
+.tab {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 7px 14px;
+    background: #0a0a10;
+    color: #666;
+    border: 1px solid #1e1e2e;
+    border-radius: 6px 6px 0 0;
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.tab:hover, .subtab:hover { color: #999; }
+
+.subtabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: -1px;
+    position: relative;
+    z-index: 1;
+}
+
+.subtab {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 7px 14px;
+    background: #0a0a10;
+    color: #666;
+    border: 1px solid #1e1e2e;
+    border-radius: 6px 6px 0 0;
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.subtab.active {
+    background: #0e0e16;
+    color: #ff4444;
+    border-bottom-color: #0e0e16;
+}
+
+.subtab-body {
+    background: #0e0e16;
+    border: 1px solid #1e1e2e;
+    border-radius: 0 8px 8px 8px;
+    padding: 14px 16px;
+}
+
+.tab.active {
+    background: #0e0e16;
+    color: #ff4444;
+    border-bottom-color: #0e0e16;
+}
+
+.tab-content {
+    display: none;
+}
+
+.tab-content.active {
+    display: block;
+    background: #0e0e16;
+    border: 1px solid #1e1e2e;
+    border-radius: 0 8px 8px 8px;
+    padding: 14px 16px;
+}
+
+.subtab-content {
+    display: none;
+}
+
+.subtab-content.active {
+    display: block;
+}
+
+/* === Agent Input === */
+.agent-input-section {
+    margin-bottom: 12px;
+}
+
+.agent-input-section h3 {
+    color: #666;
+    font-size: 11px;
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.agent-input-section canvas {
+    width: 100%;
+    max-width: 200px;
+    image-rendering: pixelated;
+    border: 1px solid #1e1e2e;
+    border-radius: 4px;
+}
+
+.features-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 3px;
+    font-size: 11px;
+}
+
+.feature-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 2px 6px;
+    background: #0a0a10;
+    border-radius: 3px;
+}
+
+.feature-label { color: #555; }
+.feature-value { color: #e0e0e0; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+.actions-list {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 3px;
+    font-size: 11px;
+}
+
+.action-item {
+    padding: 3px 6px;
+    background: #0a0a10;
+    border-radius: 3px;
+    color: #555;
+}
+
+.action-item.current {
+    background: #1a2a1a;
+    color: #4CAF50;
+    font-weight: 600;
+}
+
+/* === Action Bars === */
+.action-bar-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+    font-size: 11px;
+}
+
+.action-bar-label {
+    color: #666;
+    min-width: 110px;
+    text-align: right;
+}
+
+.action-bar-track {
+    flex: 1;
+    height: 14px;
+    background: #0a0a10;
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.action-bar-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.3s ease;
+}
+
+.action-bar-pct {
+    color: #888;
+    min-width: 35px;
+    font-variant-numeric: tabular-nums;
+}
+
 /* === Stats Panel === */
 .stats-panel {
     flex: 1;
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 0;
 }
 
 .stat-group {
@@ -221,6 +439,12 @@ main {
     border: 1px solid #1e1e2e;
     border-radius: 8px;
     padding: 14px 16px;
+}
+
+.tab-content > .stat-group {
+    border: none;
+    border-radius: 0;
+    padding: 0;
 }
 
 .stat-group h2 {
@@ -297,6 +521,49 @@ main {
     width: 100%;
     display: block;
     border-radius: 4px;
+}
+
+/* === Chart Toggle + Table === */
+.chart-toggle {
+    display: flex;
+    gap: 2px;
+}
+
+.toggle-btn {
+    padding: 5px 8px;
+    background: #0a0a10;
+    color: #555;
+    border: 1px solid #1e1e2e;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.toggle-btn:hover { color: #999; }
+.toggle-btn.active { background: #1a1a28; color: #ff4444; border-color: #ff4444; }
+
+.stats-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    margin-top: 8px;
+}
+
+.stats-table th {
+    text-align: left;
+    color: #555;
+    padding: 6px 8px;
+    border-bottom: 1px solid #1e1e2e;
+    font-weight: 600;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.stats-table td {
+    padding: 5px 8px;
+    border-bottom: 1px solid #111118;
+    font-variant-numeric: tabular-nums;
 }
 
 /* === Chart === */
@@ -382,8 +649,61 @@ tr:first-child td {
     font-weight: 600;
 }
 
+/* === Tooltips (Tippy.js theme) === */
+[data-tippy-content] { cursor: help; }
+
+.tippy-box[data-theme~='contra'] {
+    background: #1a1a28;
+    color: #ccc;
+    font-size: 11px;
+    line-height: 1.4;
+    border: 1px solid #2a2a3a;
+    border-radius: 6px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+}
+
+.tippy-box[data-theme~='contra'] .tippy-arrow {
+    color: #1a1a28;
+}
+
+.tippy-box[data-theme~='contra'] .tippy-content {
+    padding: 6px 10px;
+}
+
+.copy-btn:hover { opacity: 1 !important; }
+
 /* === Responsive === */
 @media (max-width: 900px) {
     main { flex-direction: column; }
     .game-panel { flex: none; }
+}
+
+@media (max-width: 700px) {
+    header {
+        flex-wrap: wrap;
+        gap: 8px;
+        padding: 10px 12px;
+    }
+    .header-right {
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+    .chart-header {
+        flex-direction: column;
+        gap: 8px;
+        align-items: flex-start;
+    }
+    .chart-legend {
+        flex-wrap: wrap;
+        gap: 8px 16px;
+    }
+    .controls-grid {
+        flex-wrap: wrap;
+    }
+    .setting-row input[type="range"] {
+        max-width: 80px;
+    }
+    .tabs {
+        flex-wrap: wrap;
+    }
 }

@@ -13,6 +13,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from config.settings import settings
 from contra.stats.tracker import StatsTracker
 from contra.training.callbacks import SharedFrameBuffer
 
@@ -45,7 +46,14 @@ class TrainingControls:
         self.paused = False
         self.restart_requested = False
         self.save_requested = False
-        self.episode_length = 600  # max steps per episode
+        self.save_state_requested = False
+        self.clear_state_requested = False
+        self.practice_mode = False
+        self.auto_restart = True
+        self.waiting_restart = False
+        self.step_once = False
+        self.set_level: int = -1  # -1 = no change, 0-7 = switch level
+        self.episode_length = 18_000  # 10 min safety net
         self.num_envs = 8
 
     def request_restart(self) -> None:
@@ -72,6 +80,29 @@ class TrainingControls:
         with self._lock:
             if self.save_requested:
                 self.save_requested = False
+                return True
+            return False
+
+    def request_save_state(self) -> None:
+        with self._lock:
+            self.save_state_requested = True
+
+    def consume_save_state(self) -> bool:
+        with self._lock:
+            if self.save_state_requested:
+                self.save_state_requested = False
+                return True
+            return False
+
+    def request_clear_state(self) -> None:
+        with self._lock:
+            self.clear_state_requested = True
+            self.practice_mode = False
+
+    def consume_clear_state(self) -> bool:
+        with self._lock:
+            if self.clear_state_requested:
+                self.clear_state_requested = False
                 return True
             return False
 
@@ -127,6 +158,7 @@ async def get_level_data():
         "max_scroll": max(_tracker.max_scroll(), _frame_buffer.env0_scroll if _frame_buffer else 0),
         "env0_scroll": _frame_buffer.env0_scroll if _frame_buffer else 0,
         "time_since_pb": round(_tracker.time_since_pb()),
+        "practice_scroll": _frame_buffer.practice_scroll if _frame_buffer and hasattr(_frame_buffer, 'practice_scroll') else 0,
     }
 
 
@@ -137,6 +169,7 @@ async def get_history():
     return {
         "reward_history": _tracker.reward_history(5000),
         "survival_history": _tracker.survival_history(5000),
+        "boss_history": _tracker.boss_history(5000),
         "top_runs": _tracker.top_runs(10),
     }
 
@@ -171,6 +204,97 @@ async def save_checkpoint(request: Request):
     return JSONResponse({"ok": False}, status_code=503)
 
 
+@app.post("/api/save-state")
+async def save_game_state(request: Request):
+    if not _is_local(request):
+        return JSONResponse({"ok": False}, status_code=403)
+    if _controls:
+        _controls.request_save_state()
+        return {"ok": True, "message": "Game state saved — practice mode ON"}
+    return JSONResponse({"ok": False}, status_code=503)
+
+
+@app.post("/api/step")
+async def step_once(request: Request):
+    if not _is_local(request):
+        return JSONResponse({"ok": False}, status_code=403)
+    if _controls:
+        _controls.step_once = True
+        return {"ok": True}
+    return JSONResponse({"ok": False}, status_code=503)
+
+
+@app.post("/api/set-level")
+async def set_level(request: Request, data: dict):
+    if not _is_local(request):
+        return JSONResponse({"ok": False}, status_code=403)
+    if _controls:
+        level = int(data.get("level", 0))
+        if 0 <= level <= 7:
+            _controls.set_level = level
+            return {"ok": True, "level": level}
+    return JSONResponse({"ok": False}, status_code=503)
+
+
+@app.get("/api/levels")
+async def get_levels():
+    if not _tracker:
+        return {"levels": [], "current": 0}
+    return {
+        "levels": _tracker.levels_summary(),
+        "current": _frame_buffer.current_level if _frame_buffer else 0,
+    }
+
+
+@app.get("/api/level-history/{level}")
+async def get_level_history(level: int):
+    if not _tracker:
+        return {}
+    return _tracker.level_history(level)
+
+
+@app.post("/api/auto-restart")
+async def toggle_auto_restart(request: Request):
+    if not _is_local(request):
+        return JSONResponse({"ok": False}, status_code=403)
+    if _controls:
+        _controls.auto_restart = not _controls.auto_restart
+        return {"ok": True, "auto_restart": _controls.auto_restart}
+    return JSONResponse({"ok": False}, status_code=503)
+
+
+@app.post("/api/clear-state")
+async def clear_game_state(request: Request):
+    if not _is_local(request):
+        return JSONResponse({"ok": False}, status_code=403)
+    if _controls:
+        _controls.request_clear_state()
+        return {"ok": True, "message": "Game state cleared — practice mode OFF"}
+    return JSONResponse({"ok": False}, status_code=503)
+
+
+@app.get("/api/config")
+async def get_config():
+    conf = {
+        "features": {
+            "hybrid_observation": settings.hybrid_observation,
+            "prioritised_replay": settings.prioritised_replay,
+            "overlay_sprites": settings.overlay_sprites,
+        },
+        "rewards": {
+            "death_penalty": settings.death_penalty,
+            "progress_scale": settings.progress_scale,
+        },
+        "training": {
+            "device": settings.device,
+            "total_timesteps": settings.total_timesteps,
+        },
+    }
+    if _frame_buffer and hasattr(_frame_buffer, 'trainer_config'):
+        conf["dqn"] = _frame_buffer.trainer_config
+    return conf
+
+
 @app.get("/api/best-replay")
 async def get_best_replay():
     import json
@@ -182,14 +306,14 @@ async def get_best_replay():
 
 @app.post("/api/play-best")
 async def play_best_run():
-    """Return URL to pre-recorded best run video."""
-    video_path = STATIC_DIR / "best_run.mp4"
+    """Return URL to pre-recorded best run video for current level."""
+    level = _frame_buffer.current_level if _frame_buffer else 0
+    video_path = STATIC_DIR / f"best_run_L{level}.mp4"
     if not video_path.exists():
-        return JSONResponse({"ok": False, "message": "No best run recorded yet"}, status_code=404)
-    # Add timestamp to bust cache
+        return JSONResponse({"ok": False, "message": f"No best run recorded for Level {level + 1}"}, status_code=404)
     import os
     mtime = int(os.path.getmtime(video_path))
-    return {"ok": True, "url": f"/static/best_run.mp4?t={mtime}"}
+    return {"ok": True, "url": f"/static/best_run_L{level}.mp4?t={mtime}"}
 
 
 @app.post("/api/settings")
@@ -237,10 +361,14 @@ async def ws_frames(ws: WebSocket):
                             main_bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
                         _, main_buf = cv2.imencode(".jpg", main_bgr, [cv2.IMWRITE_JPEG_QUALITY, 75])
 
-                        # Agent view: overlay frame resized to 128x128 grayscale
-                        gray = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
-                        small = cv2.resize(gray, (128, 128), interpolation=cv2.INTER_AREA)
-                        _, agent_buf = cv2.imencode(".jpg", small, [cv2.IMWRITE_JPEG_QUALITY, 60])
+                        # Agent view: actual frame stack output (what the agent sees)
+                        agent_frame = _frame_buffer.agent_view
+                        if agent_frame is not None:
+                            _, agent_buf = cv2.imencode(".jpg", agent_frame, [cv2.IMWRITE_JPEG_QUALITY, 60])
+                        else:
+                            gray = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
+                            small = cv2.resize(gray, (128, 128), interpolation=cv2.INTER_AREA)
+                            _, agent_buf = cv2.imencode(".jpg", small, [cv2.IMWRITE_JPEG_QUALITY, 60])
 
                         # Header: scroll(u16) + episode(u16) + main_size(u32) + agent_size(u32)
                         header = struct.pack("<HHII",
@@ -265,8 +393,30 @@ async def ws_stats(ws: WebSocket):
                 d = _snap_to_dict(_tracker.snapshot())
                 if _controls:
                     d["paused"] = _controls.paused
+                    d["practice"] = _controls.practice_mode
+                    d["auto_restart"] = _controls.auto_restart
+                    d["waiting_restart"] = _controls.waiting_restart
+                import resource
+                d["ram_peak_mb"] = round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024 / 1024, 1)
+                if not hasattr(ws_stats, '_ram_cache') or time.time() - ws_stats._ram_time > 10:
+                    try:
+                        import subprocess, os
+                        rss_kb = int(subprocess.check_output(['ps', '-o', 'rss=', '-p', str(os.getpid())]).strip())
+                        ws_stats._ram_cache = round(rss_kb / 1024, 1)
+                    except Exception:
+                        ws_stats._ram_cache = d["ram_peak_mb"]
+                    ws_stats._ram_time = time.time()
+                d["ram_current_mb"] = ws_stats._ram_cache
                 if _frame_buffer:
                     d["env0_episode"] = _frame_buffer.env0_episode
+                    d["features"] = _frame_buffer.env0_features
+                    d["action_counts"] = _frame_buffer.action_counts
+                    d["run_log"] = _frame_buffer.env0_run_log
+                    d["current_level"] = _frame_buffer.current_level
+                    if _controls and _controls.practice_mode:
+                        d["practice_rewards"] = _frame_buffer.practice_rewards[-200:]
+                    d["buffer_size"] = _frame_buffer.buffer_size if hasattr(_frame_buffer, 'buffer_size') else 0
+                    d["buffer_capacity"] = _frame_buffer.buffer_capacity if hasattr(_frame_buffer, 'buffer_capacity') else 0
                 msg["stats"] = d
             await ws.send_json(msg)
             await asyncio.sleep(0.5)
