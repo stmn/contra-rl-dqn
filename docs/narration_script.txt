@@ -26,6 +26,8 @@ The Features sub-tab shows the raw twenty-eight numbers the agent receives each 
 
 The Actions sub-tab shows how often the agent picks each of the sixteen button combinations, displayed as percentage bars.
 
+The Q-Values sub-tab shows the live scores the agent assigns to each action right now. Actions are sorted from highest to lowest. The green bar highlights the chosen action. When scores are close together, the agent is uncertain. When one action clearly dominates, the agent is confident in its decision.
+
 The third tab is Leaderboard — the best runs for the current level, ranked by total reward.
 
 The fourth tab is Levels. Each of the eight Contra levels has its own neural network model and separate statistics. You can switch levels by clicking the buttons here, or using the keyboard shortcut Command or Control plus one through eight. The level names come from the original ROM: Jungle, Base 1, Waterfall, Base 2, Snow Field, Energy Zone, Hangar, and Alien's Lair.
