@@ -30,12 +30,11 @@ def find_latest_checkpoint() -> Path | None:
     d = settings.checkpoint_dir
     if not d.exists():
         return None
-    manual = d / "contra_dqn_manual.pt"
-    if manual.exists():
-        return manual
-    auto = d / "auto_best.pt"
-    if auto.exists():
-        return auto
+    # Check in order: manual save, per-level checkpoint (level 0), legacy auto_best
+    for name in ["contra_dqn_manual.pt", "level_0.pt", "auto_best.pt"]:
+        p = d / name
+        if p.exists():
+            return p
     return None
 
 
