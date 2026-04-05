@@ -418,6 +418,7 @@ async def ws_stats(ws: WebSocket):
                     d["action_counts"] = _frame_buffer.action_counts
                     d["run_log"] = _frame_buffer.env0_run_log
                     d["current_level"] = _frame_buffer.current_level
+                    d["q_values"] = _frame_buffer.q_values
                     if _controls and _controls.practice_mode:
                         d["practice_rewards"] = _frame_buffer.practice_rewards[-200:]
                     d["buffer_size"] = _frame_buffer.buffer_size if hasattr(_frame_buffer, 'buffer_size') else 0

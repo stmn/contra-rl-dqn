@@ -473,6 +473,9 @@ class DQNTrainer:
                 features = self._obs_to_features(obs)
                 feat_t = torch.tensor(features, dtype=torch.float32).unsqueeze(0).to(self.device)
             q_values = self._q_values(self.q_network, img_t, feat_t)
+            # Store Q-values for dashboard
+            if self.frame_buffer:
+                self.frame_buffer.q_values = q_values[0].cpu().tolist()
             return int(q_values.argmax(dim=1).item())
 
     def _train_step(self) -> float:

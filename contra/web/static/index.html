@@ -162,6 +162,7 @@
                     <button class="subtab" data-subtab="agent-view" onclick="switchSubTab(this)">Agent View</button>
                     <button class="subtab" data-subtab="features" onclick="switchSubTab(this)">Features</button>
                     <button class="subtab" data-subtab="actions" onclick="switchSubTab(this)">Actions</button>
+                    <button class="subtab" data-subtab="qvalues" onclick="switchSubTab(this)">Q-Values</button>
                 </div>
                 <div class="subtab-body">
                     <div class="subtab-content active" id="subtab-rewards">
@@ -180,6 +181,9 @@
                     </div>
                     <div class="subtab-content" id="subtab-actions">
                         <div id="action-bars"></div>
+                    </div>
+                    <div class="subtab-content" id="subtab-qvalues">
+                        <div id="qvalues-list" style="font-size:12px;font-family:monospace"></div>
                     </div>
                 </div>
             </div>

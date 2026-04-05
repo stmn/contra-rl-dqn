@@ -319,6 +319,30 @@ function updateStats(s) {
         updateChart();
     }
 
+    // Q-Values display
+    if (s.q_values && s.q_values.length > 0) {
+        const qEl = $("#qvalues-list");
+        if (qEl) {
+            const indexed = s.q_values.map((v, i) => ({action: ACTIONS[i], value: v, idx: i}));
+            const sorted = [...indexed].sort((a, b) => b.value - a.value);
+            const maxQ = sorted[0].value;
+            const minQ = sorted[sorted.length - 1].value;
+            const range = maxQ - minQ || 1;
+            qEl.innerHTML = sorted.map((q, rank) => {
+                const pct = ((q.value - minQ) / range * 100).toFixed(0);
+                const isTop = rank === 0;
+                const color = isTop ? '#4CAF50' : '#ccc';
+                return `<div style="display:flex;align-items:center;gap:8px;padding:3px 0">
+                    <span style="min-width:120px;color:${color};font-weight:${isTop ? '700' : '400'}">${q.action}</span>
+                    <div style="flex:1;height:12px;background:#0a0a10;border-radius:3px;overflow:hidden">
+                        <div style="width:${pct}%;height:100%;background:${isTop ? '#4CAF50' : '#333'};border-radius:3px"></div>
+                    </div>
+                    <span style="min-width:70px;text-align:right;color:${color}">${q.value.toFixed(1)}</span>
+                </div>`;
+            }).join("");
+        }
+    }
+
     // Update Agent Input features
     if (s.features && s.features.length > 0) {
         const grid = $("#features-grid");
