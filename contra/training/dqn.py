@@ -77,31 +77,95 @@ def _make_linear(in_f: int, out_f: int, noisy: bool) -> nn.Module:
     return NoisyLinear(in_f, out_f) if noisy else nn.Linear(in_f, out_f)
 
 
+def _make_conv(in_c: int, out_c: int, kernel: int, stride: int = 1, spectral: bool = False) -> nn.Module:
+    conv = nn.Conv2d(in_c, out_c, kernel, stride=stride)
+    if spectral:
+        conv = nn.utils.spectral_norm(conv)
+    return conv
+
+
+class ResidualBlock(nn.Module):
+    """Residual block for IMPALA CNN."""
+    def __init__(self, channels: int, spectral: bool = False) -> None:
+        super().__init__()
+        conv1 = nn.Conv2d(channels, channels, 3, padding=1)
+        conv2 = nn.Conv2d(channels, channels, 3, padding=1)
+        if spectral:
+            conv1 = nn.utils.spectral_norm(conv1)
+            conv2 = nn.utils.spectral_norm(conv2)
+        self.block = nn.Sequential(nn.ReLU(), conv1, nn.ReLU(), conv2)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return x + self.block(x)
+
+
+class ImpalaCNN(nn.Module):
+    """IMPALA ResNet CNN (Espeholt et al., 2018) with 2x width scaling."""
+    def __init__(self, in_channels: int = 4, spectral: bool = False) -> None:
+        super().__init__()
+        channels = [64, 128, 128]  # 2x scaled from [32, 64, 64]
+        layers = []
+        for ch in channels:
+            layers.append(_make_conv(in_channels, ch, 3, stride=1, spectral=spectral))
+            layers.append(nn.MaxPool2d(3, stride=2, padding=1))
+            layers.append(ResidualBlock(ch, spectral=spectral))
+            layers.append(ResidualBlock(ch, spectral=spectral))
+            in_channels = ch
+        layers.append(nn.ReLU())
+        layers.append(nn.AdaptiveMaxPool2d((6, 6)))
+        layers.append(nn.Flatten())
+        self.network = nn.Sequential(*layers)
+        self.output_size = channels[-1] * 6 * 6  # 128 * 36 = 4608
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.network(x / 255.0)
+
+
 # ============================================================
 # Networks
 # ============================================================
 
+def _build_cnn(noisy: bool, impala: bool, spectral: bool) -> tuple[nn.Module, int]:
+    """Build CNN backbone. Returns (module, output_size)."""
+    if impala:
+        cnn = ImpalaCNN(in_channels=4, spectral=spectral)
+        return nn.Sequential(cnn, _make_linear(cnn.output_size, 512, noisy), nn.ReLU()), 512
+    else:
+        return nn.Sequential(
+            _make_conv(4, 32, 8, stride=4, spectral=spectral), nn.ReLU(),
+            _make_conv(32, 64, 4, stride=2, spectral=spectral), nn.ReLU(),
+            _make_conv(64, 64, 3, stride=1, spectral=spectral), nn.ReLU(),
+            nn.Flatten(),
+            _make_linear(64 * 12 * 12, 512, noisy), nn.ReLU(),
+        ), 512
+
+
+def _build_head(in_size: int, n_actions: int, dueling: bool, noisy: bool):
+    """Build Q-value head (standard or dueling)."""
+    if dueling:
+        return (
+            nn.Sequential(_make_linear(in_size, 256, noisy), nn.ReLU(), _make_linear(256, 1, noisy)),
+            nn.Sequential(_make_linear(in_size, 256, noisy), nn.ReLU(), _make_linear(256, n_actions, noisy)),
+        )
+    return nn.Sequential(_make_linear(in_size, 256, noisy), nn.ReLU(), _make_linear(256, n_actions, noisy))
+
+
 class QNetwork(nn.Module):
     """Standard CNN Q-network (image only)."""
 
-    def __init__(self, n_actions: int, dueling: bool = False, noisy: bool = False) -> None:
+    def __init__(self, n_actions: int, dueling: bool = False, noisy: bool = False,
+                 impala: bool = False, spectral: bool = False) -> None:
         super().__init__()
         self._dueling = dueling
-        self.cnn = nn.Sequential(
-            nn.Conv2d(4, 32, 8, stride=4), nn.ReLU(),
-            nn.Conv2d(32, 64, 4, stride=2), nn.ReLU(),
-            nn.Conv2d(64, 64, 3, stride=1), nn.ReLU(),
-            nn.Flatten(),
-            _make_linear(64 * 12 * 12, 512, noisy), nn.ReLU(),
-        )
+        self.cnn, cnn_out = _build_cnn(noisy, impala, spectral)
+        head = _build_head(cnn_out, n_actions, dueling, noisy)
         if dueling:
-            self.value_stream = nn.Sequential(_make_linear(512, 256, noisy), nn.ReLU(), _make_linear(256, 1, noisy))
-            self.advantage_stream = nn.Sequential(_make_linear(512, 256, noisy), nn.ReLU(), _make_linear(256, n_actions, noisy))
+            self.value_stream, self.advantage_stream = head
         else:
-            self.head = nn.Sequential(_make_linear(512, 256, noisy), nn.ReLU(), _make_linear(256, n_actions, noisy))
+            self.head = head
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        features = self.cnn(x / 255.0)
+        features = self.cnn(x / 255.0) if not isinstance(self.cnn[0], ImpalaCNN) else self.cnn(x)
         if self._dueling:
             value = self.value_stream(features)
             advantage = self.advantage_stream(features)
@@ -117,29 +181,24 @@ class QNetwork(nn.Module):
 class HybridQNetwork(nn.Module):
     """CNN + RAM features Q-network."""
 
-    def __init__(self, n_actions: int, n_features: int = 28, dueling: bool = False, noisy: bool = False) -> None:
+    def __init__(self, n_actions: int, n_features: int = 28, dueling: bool = False,
+                 noisy: bool = False, impala: bool = False, spectral: bool = False) -> None:
         super().__init__()
         self._dueling = dueling
-        self.cnn = nn.Sequential(
-            nn.Conv2d(4, 32, 8, stride=4), nn.ReLU(),
-            nn.Conv2d(32, 64, 4, stride=2), nn.ReLU(),
-            nn.Conv2d(64, 64, 3, stride=1), nn.ReLU(),
-            nn.Flatten(),
-            _make_linear(64 * 12 * 12, 512, noisy), nn.ReLU(),
-        )
+        self.cnn, cnn_out = _build_cnn(noisy, impala, spectral)
         self.features_net = nn.Sequential(
             _make_linear(n_features, 64, noisy), nn.ReLU(),
             _make_linear(64, 32, noisy), nn.ReLU(),
         )
-        combined_size = 512 + 32
+        combined_size = cnn_out + 32
+        head = _build_head(combined_size, n_actions, dueling, noisy)
         if dueling:
-            self.value_stream = nn.Sequential(_make_linear(combined_size, 256, noisy), nn.ReLU(), _make_linear(256, 1, noisy))
-            self.advantage_stream = nn.Sequential(_make_linear(combined_size, 256, noisy), nn.ReLU(), _make_linear(256, n_actions, noisy))
+            self.value_stream, self.advantage_stream = head
         else:
-            self.head = nn.Sequential(_make_linear(combined_size, 256, noisy), nn.ReLU(), _make_linear(256, n_actions, noisy))
+            self.head = head
 
     def forward(self, image: torch.Tensor, features: torch.Tensor) -> torch.Tensor:
-        cnn_out = self.cnn(image / 255.0)
+        cnn_out = self.cnn(image / 255.0) if not isinstance(self.cnn[0], ImpalaCNN) else self.cnn(image)
         feat_out = self.features_net(features)
         combined = torch.cat([cnn_out, feat_out], dim=1)
         if self._dueling:
@@ -375,6 +434,11 @@ class DQNTrainer:
         self._n_step = settings.n_step_returns
         self._huber = settings.huber_loss
         self._grad_clip = settings.gradient_clip
+        self._impala = settings.impala_cnn
+        self._spectral = settings.spectral_norm
+        self._munchausen = settings.munchausen_rl
+        self._m_alpha = settings.munchausen_alpha
+        self._m_tau = settings.munchausen_tau
 
         # Hyperparameters
         self.lr = 1e-4
@@ -389,7 +453,8 @@ class DQNTrainer:
         self.epsilon_decay = 50_000
 
         # Networks
-        net_kwargs = {"dueling": self._dueling, "noisy": self._noisy}
+        net_kwargs = {"dueling": self._dueling, "noisy": self._noisy,
+                      "impala": self._impala, "spectral": self._spectral}
         if self._hybrid:
             self.q_network = HybridQNetwork(self.n_actions, **net_kwargs).to(self.device)
             self.target_network = HybridQNetwork(self.n_actions, **net_kwargs).to(self.device)
@@ -495,15 +560,31 @@ class DQNTrainer:
         q_values = self._q_values(self.q_network, states_img, states_feat)
         q_values = q_values.gather(1, actions_t.unsqueeze(1)).squeeze(1)
 
-        # Target Q (Double DQN: online network selects action, target network evaluates)
-        # N-step: gamma^n for bootstrapping
+        # Target Q
         gamma_n = self.gamma ** self._n_step if self._n_step > 1 else self.gamma
         with torch.no_grad():
-            next_q_online = self._q_values(self.q_network, next_img, next_feat)
-            best_actions = next_q_online.argmax(dim=1, keepdim=True)
-            next_q_target = self._q_values(self.target_network, next_img, next_feat)
-            next_q = next_q_target.gather(1, best_actions).squeeze(1)
-            target = rewards_t + gamma_n * next_q * (1 - dones_t)
+            if self._munchausen:
+                # Munchausen RL: soft DQN with log-policy bonus
+                tau = self._m_tau
+                alpha = self._m_alpha
+                # Current state log-policy
+                q_curr_all = self._q_values(self.q_network, states_img, states_feat)
+                log_pi = F.log_softmax(q_curr_all / tau, dim=1)
+                log_pi_a = log_pi.gather(1, actions_t.unsqueeze(1)).squeeze(1)
+                log_pi_a = log_pi_a.clamp(min=-1.0)  # clip to avoid -inf
+                # Next state soft value
+                next_q_target = self._q_values(self.target_network, next_img, next_feat)
+                next_log_pi = F.log_softmax(next_q_target / tau, dim=1)
+                next_pi = F.softmax(next_q_target / tau, dim=1)
+                next_v = (next_pi * (next_q_target - tau * next_log_pi)).sum(dim=1)
+                target = rewards_t + alpha * tau * log_pi_a + gamma_n * next_v * (1 - dones_t)
+            else:
+                # Double DQN: online network selects action, target evaluates
+                next_q_online = self._q_values(self.q_network, next_img, next_feat)
+                best_actions = next_q_online.argmax(dim=1, keepdim=True)
+                next_q_target = self._q_values(self.target_network, next_img, next_feat)
+                next_q = next_q_target.gather(1, best_actions).squeeze(1)
+                target = rewards_t + gamma_n * next_q * (1 - dones_t)
 
         # TD error
         td_errors = (q_values - target).detach()
@@ -755,7 +836,8 @@ class DQNTrainer:
             self.load(str(path))
         else:
             # Fresh network for new level
-            net_kwargs = {"dueling": self._dueling, "noisy": self._noisy}
+            net_kwargs = {"dueling": self._dueling, "noisy": self._noisy,
+                          "impala": self._impala, "spectral": self._spectral}
             if self._hybrid:
                 self.q_network = HybridQNetwork(self.n_actions, **net_kwargs).to(self.device)
                 self.target_network = HybridQNetwork(self.n_actions, **net_kwargs).to(self.device)

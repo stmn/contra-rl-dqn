@@ -1049,6 +1049,11 @@ const CONFIG_TIPS = {
     n_step_returns: "Multi-step reward bootstrapping. 3 = look 3 steps ahead for reward. Faster credit assignment for delayed consequences.",
     huber_loss: "Smooth L1 loss instead of MSE. More robust to large outliers like death penalty -500.",
     gradient_clip: "Maximum gradient norm. Prevents exploding gradients from destabilizing training.",
+    impala_cnn: "IMPALA ResNet CNN — deeper network with residual blocks. +142% IQM in BTR paper. Bigger and slower but much better feature extraction.",
+    spectral_norm: "Spectral normalization on conv layers — constrains Lipschitz constant, stabilizes training. From GAN literature.",
+    munchausen_rl: "Soft DQN: adds log-policy bonus to target. Reduces policy churn by ~6%. Replaces Double DQN.",
+    munchausen_alpha: "Munchausen scaling factor for log-policy bonus.",
+    munchausen_tau: "Munchausen softmax temperature. Lower = sharper policy.",
 };
 
 async function loadConfig() {

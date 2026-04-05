@@ -33,5 +33,12 @@ class Settings(BaseSettings):
     huber_loss: bool = True            # Huber loss instead of MSE (robust to outliers)
     gradient_clip: float = 10.0        # Max gradient norm (0 = disabled)
 
+    # BTR upgrades (Beyond The Rainbow, Clark et al. 2024)
+    impala_cnn: bool = False           # IMPALA ResNet CNN instead of 3-layer CNN
+    spectral_norm: bool = False        # Spectral normalization on conv layers
+    munchausen_rl: bool = False        # Munchausen RL (soft DQN, replaces Double DQN)
+    munchausen_alpha: float = 0.9      # Munchausen scaling factor
+    munchausen_tau: float = 0.03       # Munchausen softmax temperature
+
 
 settings = Settings()

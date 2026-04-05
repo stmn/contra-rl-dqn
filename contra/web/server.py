@@ -285,6 +285,9 @@ async def get_config():
             "n_step_returns": settings.n_step_returns,
             "huber_loss": settings.huber_loss,
             "gradient_clip": settings.gradient_clip,
+            "impala_cnn": settings.impala_cnn,
+            "spectral_norm": settings.spectral_norm,
+            "munchausen_rl": settings.munchausen_rl,
         },
         "rewards": {
             "death_penalty": settings.death_penalty,
