@@ -103,7 +103,7 @@ class ImpalaCNN(nn.Module):
     """IMPALA ResNet CNN (Espeholt et al., 2018) with 2x width scaling."""
     def __init__(self, in_channels: int = 4, spectral: bool = False) -> None:
         super().__init__()
-        channels = [64, 128, 128]  # 2x scaled from [32, 64, 64]
+        channels = [32, 64, 64]  # 2x scaled from original IMPALA [16, 32, 32]
         layers = []
         for ch in channels:
             layers.append(_make_conv(in_channels, ch, 3, stride=1, spectral=spectral))
@@ -115,7 +115,7 @@ class ImpalaCNN(nn.Module):
         layers.append(nn.AdaptiveMaxPool2d((6, 6)))
         layers.append(nn.Flatten())
         self.network = nn.Sequential(*layers)
-        self.output_size = channels[-1] * 6 * 6  # 128 * 36 = 4608
+        self.output_size = channels[-1] * 6 * 6  # 64 * 36 = 2304
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.network(x / 255.0)
@@ -557,8 +557,8 @@ class DQNTrainer:
         dones_t = torch.tensor(dones).to(self.device)
 
         # Current Q
-        q_values = self._q_values(self.q_network, states_img, states_feat)
-        q_values = q_values.gather(1, actions_t.unsqueeze(1)).squeeze(1)
+        q_all = self._q_values(self.q_network, states_img, states_feat)
+        q_values = q_all.gather(1, actions_t.unsqueeze(1)).squeeze(1)
 
         # Target Q
         gamma_n = self.gamma ** self._n_step if self._n_step > 1 else self.gamma
@@ -567,9 +567,8 @@ class DQNTrainer:
                 # Munchausen RL: soft DQN with log-policy bonus
                 tau = self._m_tau
                 alpha = self._m_alpha
-                # Current state log-policy
-                q_curr_all = self._q_values(self.q_network, states_img, states_feat)
-                log_pi = F.log_softmax(q_curr_all / tau, dim=1)
+                # Current state log-policy (reuse q_all from above)
+                log_pi = F.log_softmax(q_all.detach() / tau, dim=1)
                 log_pi_a = log_pi.gather(1, actions_t.unsqueeze(1)).squeeze(1)
                 log_pi_a = log_pi_a.clamp(min=-1.0)  # clip to avoid -inf
                 # Next state soft value
