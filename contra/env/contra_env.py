@@ -318,7 +318,7 @@ class ContraEnv(gym.Env):
 
         # Speed bonus: faster scroll = more reward per screen unit
         speed_multiplier = 1.0 + min(scroll_delta / 5.0, 1.0)
-        scroll_reward = scroll_delta * 1.6 * speed_multiplier
+        scroll_reward = scroll_delta * settings.progress_scale * speed_multiplier
         total_reward += scroll_reward
         self._reward_scroll += scroll_reward
         self._prev_scroll = scroll

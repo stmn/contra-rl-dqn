@@ -21,7 +21,7 @@ class Settings(BaseSettings):
 
     # Rewards
     death_penalty: float = -500.0
-    progress_scale: float = 1.0
+    progress_scale: float = 4.0
 
     # Feature flags
     hybrid_observation: bool = True    # RAM features alongside pixels
@@ -36,7 +36,7 @@ class Settings(BaseSettings):
     # BTR upgrades (Beyond The Rainbow, Clark et al. 2024)
     impala_cnn: bool = False           # IMPALA ResNet CNN instead of 3-layer CNN
     spectral_norm: bool = False        # Spectral normalization on conv layers
-    munchausen_rl: bool = False        # Munchausen RL (soft DQN, replaces Double DQN)
+    munchausen_rl: bool = False        # Munchausen RL (soft DQN, replaces Double DQN) — disabled: overestimates on MPS
     munchausen_alpha: float = 0.9      # Munchausen scaling factor
     munchausen_tau: float = 0.03       # Munchausen softmax temperature
 
