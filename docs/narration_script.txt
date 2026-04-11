@@ -14,7 +14,7 @@ Now the tabs on the right side.
 
 The first tab is Overview. It shows total episodes played, total timesteps processed, training speed in steps per second, what percentage of episodes hit the time limit, how many auto-rollbacks happened, and when the last auto-save occurred.
 
-The second tab is Live, which has five sub-tabs for real-time information about the current episode.
+The second tab is Live, which has six sub-tabs for real-time information about the current episode.
 
 The Rewards sub-tab shows a color-coded breakdown: green for scroll reward, orange for kill reward, blue for turret and boss hits, purple for weapon upgrades, red for death penalties.
 
@@ -36,7 +36,7 @@ The fifth tab is Config, listing all training parameters and feature flags. Hove
 
 Below the tabs is the Level Progress bar. The green fill shows how far the agent is in the current run. Red marks show where the agent has died in previous runs, forming a death heatmap. The yellow PB line marks the personal best — the furthest point ever reached on this level.
 
-At the bottom is the Reward History chart. The red area shows raw reward for each episode. The yellow line is the rolling average — when it trends upward, the agent is improving. The purple line shows the percentage of episodes where the agent reached the level boss.
+At the bottom is the Reward History chart. The red area shows raw reward for each episode. The yellow line is the rolling average — when it trends upward, the agent is improving. The green line shows average survival time in steps — how long the agent stays alive. The purple line shows the percentage of episodes where the agent reached the level boss.
 
 Each dataset can be toggled on or off using the checkboxes in the legend. You can switch between chart and table view. Two sliders control the data range and the averaging window size. Hovering over the chart shows a vertical crosshair with values for all visible datasets.
 

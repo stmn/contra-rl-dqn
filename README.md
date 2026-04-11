@@ -15,7 +15,7 @@ An AI agent learning to play **[Contra](https://en.wikipedia.org/wiki/Contra_(vi
 - **Decides**: Which of 16 button combinations to press (right, jump, shoot, combinations)
 - **Learns from**: Scroll progress, enemy kills, turret/boss damage, weapon upgrades, death penalties
 
-### Algorithm — Rainbow DQN (5/6)
+### Algorithm — Rainbow DQN (5/6) + BTR
 
 | Extension | Description | Flag |
 |-----------|------------|------|
@@ -26,6 +26,14 @@ An AI agent learning to play **[Contra](https://en.wikipedia.org/wiki/Contra_(vi
 | **N-step Returns** | Multi-step reward bootstrapping — faster credit assignment | `N_STEP_RETURNS` |
 
 Plus: Huber loss (robust to outliers), gradient clipping, hybrid observation (pixels + game state features).
+
+**Beyond The Rainbow (BTR)** upgrades ([Clark et al. 2024](https://arxiv.org/abs/2407.20171)), all behind feature flags:
+
+| Upgrade | Description | Flag |
+|---------|------------|------|
+| **IMPALA CNN** | 2× width ResNet-style CNN — more expressive backbone | `IMPALA_CNN` |
+| **Spectral Norm** | Constrains Lipschitz constant of conv layers — stabilizes training | `SPECTRAL_NORM` |
+| **Munchausen RL** | Soft DQN with log-policy bonus — encourages exploration | `MUNCHAUSEN_RL` |
 
 ### Sprite Overlay
 Enemy positions and bullets read from NES RAM and drawn as shape markers (14 enemy types from [ROM disassembly](https://github.com/vermiceli/nes-contra-us)):
@@ -38,10 +46,11 @@ Enemy positions and bullets read from NES RAM and drawn as shape markers (14 ene
 ### Reward System
 | Signal | Value | Purpose |
 |--------|-------|---------|
-| Map progress | `scroll_delta * 1.6 * speed_bonus` | Moving forward through the level |
+| Map progress | `scroll_delta * PROGRESS_SCALE * speed_bonus` | Moving forward through the level |
 | Enemy kill | `score_delta * 15` | Incentivize shooting |
 | Turret/boss hit | `+50 per hit` | Reward damaging multi-HP enemies |
 | Weapon upgrade | `+100 per strength level` | Pick up better weapons (Spread = +300) |
+| Stagnation | `-1 per step` after 5s idle | Prevent getting stuck |
 | Death | `-500` | Avoid enemies and bullets |
 
 ### Per-Level Models
@@ -79,11 +88,11 @@ Real-time web dashboard at **http://localhost:41918**:
 
 - **Live game preview** — click to swap main/agent view
 - **Overview** — episodes, timesteps, FPS, buffer, RAM usage
-- **Live tab** — rewards breakdown, events feed, agent view (enemies/bullets/weapon), features, actions
+- **Live tab** — rewards breakdown, events feed, agent view (enemies/bullets/weapon), features, actions, Q-values
 - **Leaderboard** — top runs per level
 - **Levels** — switch levels, per-level stats
 - **Config** — all hyperparameters with tooltips
-- **Reward History** — chart with toggleable datasets (reward, boss reach %), crosshair on hover
+- **Reward History** — chart with toggleable datasets (reward, avg survival, boss reach %), crosshair on hover
 - **Level Progress** — death heatmap, practice marker, PB line
 - **Keyboard**: Space (pause), Arrow Right (step), Cmd/Ctrl+1-8 (switch level)
 
@@ -145,32 +154,6 @@ contra-rl-dqn/
 ├── roms/                     # ROM + NES palette (gitignored)
 └── checkpoints/              # Model checkpoints per level (gitignored)
 ```
-
-## RAM Addresses
-
-Verified against [ROM disassembly](https://github.com/vermiceli/nes-contra-us) and [Data Crystal](https://datacrystal.tcrf.net/wiki/Contra_(NES)/RAM_map):
-
-| Address | Name | Notes |
-|---------|------|-------|
-| `$64` | `LEVEL_SCREEN_NUMBER` | Camera screen index |
-| `$65` | `LEVEL_SCREEN_SCROLL_OFFSET` | Pixels within screen |
-| `$90` | Player state | 0=respawn, 1=alive, 2=dead |
-| `$30` | `CURRENT_LEVEL` | 0-7 (Jungle to Alien's Lair) |
-| `$32` | `P1_NUM_LIVES` | 0 = last life |
-| `$84` | `BOSS_AUTO_SCROLL_COMPLETE` | 1 = boss revealed |
-| `$AA` | `P1_CURRENT_WEAPON` | 0=R, 1=M, 2=F, 3=S, 4=L, 5=B |
-| `$AE` | Invincibility timer | 127→0 after respawn |
-| `$334` | Player X | Screen position |
-| `$31A` | Player Y | Screen position |
-| `$528` | `ENEMY_TYPE` | 16 slots ([full list](https://github.com/vermiceli/nes-contra-us/blob/main/src/bank7.asm#L9161)) |
-| `$578` | `ENEMY_HP` | Boss door=32, turrets=8 |
-| `$4B8` | `ENEMY_ROUTINE` | 0=dead |
-| `$33E` | `ENEMY_X_POS` | 16 slots |
-| `$324` | `ENEMY_Y_POS` | 16 slots |
-| `$508` | `ENEMY_X_VELOCITY_FAST` | Movement direction |
-| `$5A8` | `ENEMY_ATTRIBUTES` | Weapon code for items |
-
-cynes uses reversed bit order: `NES_INPUT_RIGHT=1`, `NES_INPUT_A=128`.
 
 ## License
 
