@@ -84,6 +84,8 @@ Each level has its own model, replay buffer, and statistics. Switch levels with 
 
 ## Dashboard
 
+[![Dashboard Tour](https://img.youtube.com/vi/HGlKOiiEIsE/maxresdefault.jpg)](https://www.youtube.com/watch?v=HGlKOiiEIsE)
+
 Real-time web dashboard at **http://localhost:41918**:
 
 - **Live game preview** — click to swap main/agent view
