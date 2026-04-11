@@ -36,6 +36,9 @@ Plus: Huber loss (robust to outliers), gradient clipping, hybrid observation (pi
 | **Spectral Norm** | Constrains Lipschitz constant of conv layers — stabilizes training | `SPECTRAL_NORM` |
 | **Munchausen RL** | Soft DQN with log-policy bonus — encourages exploration | `MUNCHAUSEN_RL` |
 
+> [!TIP]
+> Every extension can be toggled independently via `.env` flags. Try enabling/disabling them to see how each one affects training performance.
+
 ### Sprite Overlay
 Enemy positions and bullets read from NES RAM and drawn as shape markers (14 enemy types from [ROM disassembly](https://github.com/vermiceli/nes-contra-us)):
 
@@ -83,6 +86,9 @@ Each level has its own model, replay buffer, and statistics. Switch levels with 
 | Dashboard | [FastAPI](https://fastapi.tiangolo.com) + WebSocket + [Chart.js](https://www.chartjs.org) + [Tippy.js](https://atomiks.github.io/tippyjs/) |
 | ROM Analysis | [Contra NES Disassembly](https://github.com/vermiceli/nes-contra-us) |
 
+> [!NOTE]
+> cynes is a headless emulator — no audio output. Use [Watch Mode (FCEUX)](#watch-mode-fceux) to hear the game.
+
 ## Dashboard
 
 **[Dashboard Tour (YouTube)](https://www.youtube.com/watch?v=HGlKOiiEIsE)**
@@ -110,11 +116,12 @@ brew install fceux
 
 FCEUX sends screen pixels + RAM to Python. The agent applies overlay and runs inference. NES 2C02 palette matched between emulators.
 
-**Note**: The agent plays worse in FCEUX than in training because:
-- **Input latency** — file-based communication adds ~2 frame delay. In Contra, 2 frames decide between dodging a bullet and dying.
-- **Decision instability** — early models assign nearly identical scores to different actions, so small pixel differences between emulators can flip the chosen action entirely.
-
-The web dashboard shows the true agent performance.
+> [!WARNING]
+> The agent plays worse in FCEUX than in training:
+> - **Input latency** — file-based communication adds ~2 frame delay. In Contra, 2 frames decide between dodging a bullet and dying.
+> - **Decision instability** — early models assign nearly identical scores to different actions, so small pixel differences between emulators can flip the chosen action entirely.
+>
+> The web dashboard shows the true agent performance.
 
 ## Quick Start
 
