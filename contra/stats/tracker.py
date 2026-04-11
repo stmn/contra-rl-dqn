@@ -87,6 +87,31 @@ class StatsTracker:
 
         self.load()
 
+    def reset(self) -> None:
+        """Clear all stats for a fresh start."""
+        self._episode = 0
+        self._current_reward = 0.0
+        self._best_reward = 0.0
+        self._best_level = 0
+        self._deaths_this_run = 0
+        self._total_deaths = 0
+        self._training_start = time.time()
+        self._timesteps = 0
+        self._fps = 0.0
+        self._generation = 0
+        self._best_reward_time = 0.0
+        self._death_positions = []
+        self._max_scroll_seen = 0
+        self._reward_history = []
+        self._survival_history = []
+        self._boss_history = []
+        self._recent_timeouts = []
+        self._rollback_count = 0
+        self._top_runs = []
+        self._level_stats = {}
+        if self._save_path.exists():
+            self._save_path.unlink()
+
     def _get_level_stats(self, level: int) -> dict:
         if level not in self._level_stats:
             self._level_stats[level] = {

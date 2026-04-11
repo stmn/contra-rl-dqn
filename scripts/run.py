@@ -115,6 +115,7 @@ def main() -> None:
         log.info(f"Restored peak avg: {trainer._peak_avg:.0f}")
     else:
         log.info("Starting fresh training")
+        tracker.reset()
 
     # Graceful shutdown
     def shutdown(signum, frame):
