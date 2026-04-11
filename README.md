@@ -2,7 +2,8 @@
 
 An AI agent learning to play **[Contra](https://en.wikipedia.org/wiki/Contra_(video_game))** (NES, 1988) using [Rainbow DQN](https://arxiv.org/abs/1710.02298) — combining 5 extensions of Deep Q-Network. The agent sees the game screen + game state features extracted from NES RAM, decides which buttons to press, and improves through thousands of attempts.
 
-**Built from scratch with [Claude Code](https://claude.ai/code), just for fun. This is not a solved game — Contra is extremely demanding and achieving human-level play remains an open challenge for reinforcement learning.**
+> [!NOTE]
+> Built from scratch with [Claude Code](https://claude.ai/code), just for fun. This is not a solved game — Contra is extremely demanding and achieving human-level play remains an open challenge for reinforcement learning.
 
 ![Dashboard](docs/dashboard.gif)
 
@@ -84,7 +85,7 @@ Each level has its own model, replay buffer, and statistics. Switch levels with 
 
 ## Dashboard
 
-[![Dashboard Tour](https://img.youtube.com/vi/HGlKOiiEIsE/maxresdefault.jpg)](https://www.youtube.com/watch?v=HGlKOiiEIsE)
+**[Dashboard Tour (YouTube)](https://www.youtube.com/watch?v=HGlKOiiEIsE)**
 
 Real-time web dashboard at **http://localhost:41918**:
 
