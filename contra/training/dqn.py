@@ -634,29 +634,11 @@ class DQNTrainer:
                     new_level = self.controls.set_level
                     self.controls.set_level = -1
                     old_level = self.env.unwrapped._start_level
-                    # Save current level's model + state
-                    self._save_level(old_level)
-                    self._level_avg_windows[old_level] = list(self._avg_window)
-                    self._level_peak_avgs[old_level] = self._peak_avg
-                    # Switch level
-                    self.env.unwrapped._start_level = new_level
-                    # Load new level's model and clear buffer
-                    self._load_level(new_level)
-                    self._avg_window = list(self._level_avg_windows.get(new_level, []))
-                    self._peak_avg = self._level_peak_avgs.get(new_level, 0.0)
-                    if self._per:
-                        self.replay_buffer = PrioritisedReplayBuffer(
-                            self.buffer_size, total_steps=self.total_timesteps, train_freq=self.train_freq)
-                    else:
-                        self.replay_buffer = ReplayBuffer(self.buffer_size)
-                    if self.frame_buffer:
-                        self.frame_buffer.current_level = new_level
-                        if self.frame_buffer.tracker:
-                            self.frame_buffer.tracker.set_current_level(new_level)
+                    self._hot_swap_level(old_level, new_level)
+                    # Manual switch: also reset the game to start the new level fresh
                     obs, info = self.env.reset()
                     ep_reward = 0.0
                     ep_steps = 0
-                    print(f"Switched to Level {new_level + 1}")
                     continue
                 if self.controls.consume_save():
                     level = self.env.unwrapped._start_level
@@ -692,6 +674,13 @@ class DQNTrainer:
             done = terminated or truncated
             ep_reward += reward
             ep_steps += 1
+
+            # Auto-detect level transition (agent beat the level in-game)
+            actual_level = info.get("level", self.env.unwrapped._start_level)
+            expected_level = self.env.unwrapped._start_level
+            if actual_level != expected_level and 0 <= actual_level < 8:
+                self._hot_swap_level(expected_level, actual_level)
+                # Game continues — same lives, weapon, score intact
 
             # Track action usage
             if self.frame_buffer and action < len(self.frame_buffer.action_counts):
@@ -822,6 +811,44 @@ class DQNTrainer:
                     f"Buffer: {len(self.replay_buffer):,}"
                     f"{mode_str}"
                 )
+
+    def _hot_swap_level(self, old_level: int, new_level: int) -> None:
+        """Switch model/buffer/stats to new level WITHOUT resetting the game.
+
+        Used when the NES naturally transitions levels (agent beat a boss).
+        The game continues seamlessly — lives, weapon, score stay intact.
+        """
+        # Save old level
+        self._save_level(old_level)
+        self._level_avg_windows[old_level] = list(self._avg_window)
+        self._level_peak_avgs[old_level] = self._peak_avg
+
+        # Update start_level (so next reset starts correct level)
+        self.env.unwrapped._start_level = new_level
+
+        # Load new level model (or fresh weights)
+        self._load_level(new_level)
+        self._avg_window = list(self._level_avg_windows.get(new_level, []))
+        self._peak_avg = self._level_peak_avgs.get(new_level, 0.0)
+
+        # Fresh replay buffer (old level experience is useless)
+        if self._per:
+            self.replay_buffer = PrioritisedReplayBuffer(
+                self.buffer_size, total_steps=self.total_timesteps, train_freq=self.train_freq)
+        else:
+            self.replay_buffer = ReplayBuffer(self.buffer_size)
+
+        # Flush N-step buffer (contains old level transitions)
+        if self._nstep_buf:
+            self._nstep_buf.flush()
+
+        # Update tracker/frame buffer
+        if self.frame_buffer:
+            self.frame_buffer.current_level = new_level
+            if self.frame_buffer.tracker:
+                self.frame_buffer.tracker.set_current_level(new_level)
+
+        print(f"\n=== LEVEL COMPLETE! L{old_level + 1} → L{new_level + 1} (hot swap) ===")
 
     def _save_level(self, level: int) -> None:
         """Save model checkpoint for a specific level."""
